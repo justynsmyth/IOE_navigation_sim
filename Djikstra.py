@@ -1,14 +1,13 @@
 import heapq
 
-def Djikstra(start_node, end_node, G):
-    distances = {node: float('inf') for node in G.nodes()}
+def Djikstra(start_node, end_node, GV, player_known_roadblocks):
+    distances = {node: float('inf') for node in GV.G.nodes()}
     distances[start_node] = 0
-    previous_nodes = {node: None for node in G.nodes()}
+    previous_nodes = {node: None for node in GV.G.nodes()}
     
     priority_queue = [(0, start_node)]  # (distance, node)
 
     visited = set()
-
     while priority_queue:
         # Get the node with the smallest tentative distance
         current_distance, current_node = heapq.heappop(priority_queue)
@@ -23,11 +22,16 @@ def Djikstra(start_node, end_node, G):
         visited.add(current_node)
 
         # Check all neighbors (connected nodes) of the current node
-        for neighbor in G.neighbors(current_node):
+        for neighbor in GV.G.neighbors(current_node):
             if neighbor in visited:
                 continue
 
-            weight = G[current_node][neighbor]['weight']
+            # Skip the roadblocks in player_known_roadblocks
+            if (current_node, neighbor) in player_known_roadblocks or (neighbor, current_node) in player_known_roadblocks:
+                print(f"Rerouting around roadblock")
+                continue
+
+            weight = GV.G[current_node][neighbor]['weight']
 
             new_distance = current_distance + weight
 

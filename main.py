@@ -1,7 +1,12 @@
+from datetime import datetime
 import pygame
 import sys
-from map_drawer import GraphVisualizer
-from player import load_player_info
+from GraphVisualizer import GraphVisualizer
+from GameGenerator import GameGenerator
+from settings_utils import merge_settings, process_settings, load_settings
+from player import LoadPlayerInfo
+from roadblock import LoadRoadblockInfo
+from congestion import LoadCongestionInfo
 
 pygame.init()
 
@@ -36,7 +41,10 @@ clock = pygame.time.Clock()
 
 GRAPH_FILE_PATH = "src/ext/map.json"
 START_END_PATH = "src/ext/start_end_indices.json"
-SETUP_PATH = "src/ext/setup.json"
+SETUP_PATH = "src/ext/Setup.json"
+DEFAULT_SETUP = "src/ext/DefaultConfig.json"
+ROADBLOCK_PATH = "src/ext/roadblock.json"
+CONGESTION_PATH = "src/ext/congestion.json"
 
 
 class GameManager:
@@ -63,20 +71,60 @@ class GameManager:
         self.running = False
         self.time = 0
         self.clock = pygame.time.Clock()
+
+        # Game Related information
+        self.num_players = 0
+        self.num_completed = 0
+        self.time_started = datetime.now().strftime("%m%d_%H%M%S")
+
+    def InitGenerator(self):
+        self.Generator = SetupGenerator()
+        self.Generator.SaveDecisionCsv(self.time_started)
+        self.Generator.SaveSetupCsv(self.time_started)
     
     def InitPlayers(self):
-        self.players = load_player_info(START_END_PATH, SETUP_PATH, self.GV)
+        self.players = LoadPlayerInfo(START_END_PATH, self.time_started, self.GV, self.Generator)
         for player in self.players:
             print(player)
+        self.num_players = len(self.players)
 
     def UpdatePlayers(self):
-        for player in self.players:
+        self.finished_players = [player for player in self.players if player.finished]
+        unfinished_players = [player for player in self.players if not player.finished] 
+        for player in unfinished_players:
             player.update()
+            if player.finished:
+                self.num_completed += 1
+                self.finished_players.append(player)
 
     def ResetPlayers(self):
-        ''' Move all players back to start. Resets logs to empty.'''
+        ''' Move all players back to start. Resets position logs to empty.'''
         self.InitPlayers()
-        
+
+    def InitRoadblocks(self):
+        """ Spawns Roadblocks from roadblock.json file """
+        self.roadblocks = LoadRoadblockInfo(ROADBLOCK_PATH, self.GV)
+        for roadblock in self.roadblocks:
+            print(roadblock)
+    
+    def UpdateRoadblocks(self):
+        """ Draws Roadblock state on Map."""
+        for roadblock in self.roadblocks:
+            roadblock.update()
+
+    def ResetRoadblocks(self):
+        """ Mark all roadblocks as unreported. """
+        self.InitRoadblocks()
+
+    def InitCongestions(self):
+        """ Spawns Congestions from congestion.json file"""
+        self.congestions = LoadCongestionInfo(CONGESTION_PATH, self.GV)
+        for congestion in self.congestions:
+            print(congestion)
+    
+    def ResetCongestions(self):
+        """ Rereads the file for congestions."""
+        self.InitCongestions()
 
 
     def draw_buttons(self):
@@ -101,7 +149,7 @@ class GameManager:
 
         status_text = FONT.render("Status:", True, BLACK)
         time_text = FONT.render(f"Time since started: {self.time // 1000} sec", True, BLACK)
-        completed_text = FONT.render("Number of people completed: X/N", True, BLACK)
+        completed_text = FONT.render(f"Number of people completed: {self.num_completed}/{self.num_players}", True, BLACK)
 
         screen.blit(status_text, (text_x, text_y))
         screen.blit(completed_text, (text_x, text_y + 50))
@@ -127,8 +175,10 @@ class GameManager:
         padding = 10
         map_rect = pygame.Rect(MAP_X + padding, MAP_Y + padding, MAP_WIDTH - 2 * padding, MAP_HEIGHT - 2 * padding)
         pygame.draw.rect(screen, BROWN, map_rect)
+        # Add any extra drawing here
         self.GV.draw_graph(screen, map_rect)
         self.GV.draw_players(screen, self.players, map_rect)
+        self.GV.draw_roadblocks(screen, self.roadblocks, map_rect)
 
     def draw_timer(self):
         if self.running:
@@ -155,7 +205,8 @@ class GameManager:
                     self.running = False
                     self.time = 0  # Reset the time accumulator
                     self.ResetPlayers()
-
+                    self.ResetRoadblocks()
+                    self.ResetCongestions()
         return True
 
     def update(self):
@@ -169,15 +220,25 @@ class GameManager:
 
         if self.running:
             self.UpdatePlayers()
+            self.UpdateRoadblocks()
 
         return self.handle_events()
+    
 
-
+def SetupGenerator() -> GameGenerator:
+    settings = merge_settings(SETUP_PATH, DEFAULT_SETUP)
+    merged_settings = process_settings(settings)
+    start_end_json = load_settings(START_END_PATH)
+    Generator = GameGenerator(merged_settings, start_end_json)
+    return Generator
 
 def main():
     DrawManager = GraphVisualizer(GRAPH_FILE_PATH)
     game_manager = GameManager(DrawManager)
+    game_manager.InitGenerator()
     game_manager.InitPlayers()
+    game_manager.InitRoadblocks()
+    game_manager.InitCongestions()
 
     playing = True 
     while playing:

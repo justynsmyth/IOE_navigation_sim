@@ -4,20 +4,23 @@
         "max": 25
     },
     "n": 1000,
-    "Seed": 5,
-    "TimeLagActivated" : true,
-    "TimeLagMin" : 1,
-    "TimeLagMax" : 5,
-    "ReportTimePenaltyActivated" : true,
-    "ReportTimePenalty" : 0,
-    "IsAIControlled": true,
+    "Seed": 1,
+    "TimeLagActivated" : false,
+    "TimeLagMin" : null,
+    "TimeLagMax" : null,
+    
+    "ReportTimePenaltyActivated" : false,
+    "ReportTimePenalty" : null,
+
+    "IsAIControlled": false,
     "ProbOfNextNode": 0.5,
     "ProbCorrectReportIfRoadblock": 0.7,
     "ProbWrongReportIfNoRoadblock": 0.3,
     "ParticipationAmount": 0.017,
-    "MinReportDistance": 10,
-    "MaxReportDistance": 50,
-    "ProbCorrectRandomReport": 0.5,
+    "MinReportDistance": 8000,
+    "MaxReportDistance": 10000,
+    "ProbCorrectRandomReport": 0.6,
+
     "ProbPlayerFollowsNavigation": 0.8,
     "ProbPlayerReportsCorrectRoadblock": 0.9,
     "ProbPlayerReportsRoadblock": 0.5
