@@ -81,6 +81,7 @@ class GameManager:
         self.Generator = SetupGenerator()
         self.Generator.SaveDecisionCsv(self.time_started)
         self.Generator.SaveSetupCsv(self.time_started)
+        self.Generator.SavePlayerDecisionCsv(self.time_started)
 
     def ResetGenerator(self):
         self.InitGenerator()

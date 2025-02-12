@@ -173,14 +173,10 @@ class GameGenerator:
                         '[4] Random Time Sequence',
                         '[6] Is Random Report Correct',
                         '[7] Time Lag Values',
-                        'Player Follows Navigation',
-                        'Player Reports Correct Roadblock',
-                        'Player Reports Roadblock',
-                        'Player Speeds'])
+                        ])
 
 
             for i in range(self.n):
-                # speed_val = self.players_speeds[i] if i < len(self.players_speeds) else None
                 w.writerow([self.ArrIsNextNode[i],
                             self.ArrIsCorrectNextRoadblock[i],
                             self.ArrIsCorrectAdjRoadblock[i],
@@ -189,10 +185,41 @@ class GameGenerator:
                             self.random_time_sequences[i],
                             self.ArrIsCorrectRandomReport[i],
                             self.ArrTimeLagValues[i]
-                            # self.ArrPlayerFollowsNavigation[i],
-                            # self.ArrPlayerReportsCorrectRoadblock[i],
-                            # self.ArrPlayerReportsRoadblock[i],
-                            # speed_val
                             ])
 
             print("Successfully Saved Decision.csv!")
+
+    def SavePlayerDecisionCsv(self, time):
+        directory = os.path.join('logs', time)
+        os.makedirs(directory, exist_ok=True)
+        file_path = os.path.join(directory, 'PlayerDecisions.csv')
+        with open(file_path, mode='w', newline='') as file:
+            w = csv.writer(file)
+            w.writerow(['PlayerID',
+                        'Player Speeds',
+                        'Player Follows Navigation',
+                        'Player Reports Correct Roadblock',
+                        'Player Reports Roadblock',
+                        ])
+
+            for i, player in enumerate(self.Players):
+                w.writerow([i,
+                            self.players_speeds[i],
+                            player['follow_navigation_prob'],
+                            player['report_roadblock_prob'],
+                            player['false_report_no_roadblock_prob']])
+            w.writerow([])
+            w.writerow(['PlayerID',
+                        ' ',
+                        'Player Follows Navigation',
+                        'Player Reports Correct Roadblock',
+                        'Player Reports Roadblock',
+                        ])
+            for i, player in enumerate(self.Players):
+                for j in range(self.n):
+                    w.writerow([i,
+                                ' ',
+                                player['follows_navigation'][j],
+                                player['reports_roadblock_if_roadblock'][j],
+                                player['reports_roadblock_no_roadblock'][j]
+                                ])
