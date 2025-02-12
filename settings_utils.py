@@ -27,8 +27,6 @@ def merge_settings(config_file, default_file='DefaultConfig.json'):
 def process_settings(settings):
     """Process settings to replace None with 'None'."""
 
-    IsValidPlayerSpeed(settings)
-
     # If TimeLag is Not Active, Set Values to None
     if not settings.get("TimeLagActivated", False):
         settings["TimeLagMin"] = None
@@ -159,30 +157,6 @@ def ValidateAISettings(settings) -> bool:
             raise ValueError(
                 f"ProbPlayerReportsRoadblock: {prob_player_reports_roadblock} must be between 0.0 and 1.0.")
 
-    except ValueError as e:
-        print(e)
-        exit(1)
-
-
-def IsValidPlayerSpeed(settings) -> bool:
-    try:
-        min = int(settings["PlayerSpeed"]["min"])
-        max = int(settings["PlayerSpeed"]["max"])
-        if min <= 0:
-            raise ValueError(
-                f"PlayerSpeed: {min} must be a positive integer.")
-        if max <= 0:
-            raise ValueError(
-                f"PlayerSpeed: {max} must be a positive integer.")
-        if max < min:
-            raise ValueError(
-                f"Invalid PlayerSpeed values: {max} should be >= {min}."
-            )
-        
-    except ValueError as e:
-        print(e)
-        exit(1)
-        
     except ValueError as e:
         print(e)
         exit(1)

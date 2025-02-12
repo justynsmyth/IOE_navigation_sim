@@ -125,9 +125,9 @@ class Player:
     
     def update(self):
         """Update the position and direction over time. Checks for Roadblock."""
-        follow_nav = self.Gen.ArrPlayerFollowsNavigation[self.indices["FollowNav"]]
-        report_roadblock = self.Gen.ArrPlayerReportsRoadblock[self.indices["PlayerReportRoadblock"]]
-        correct_roadblock_report = self.Gen.ArrPlayerReportsCorrectRoadblock[self.indices["PlayerReportCorrectRoadblock"]]
+        # follow_nav = self.Gen.ArrPlayerFollowsNavigation[self.indices["FollowNav"]]
+        # report_roadblock = self.Gen.ArrPlayerReportsRoadblock[self.indices["PlayerReportRoadblock"]]
+        # correct_roadblock_report = self.Gen.ArrPlayerReportsCorrectRoadblock[self.indices["PlayerReportCorrectRoadblock"]]
 
         if self.dest_node is None or self.t >= 1:
             if self.RoadblockOnCurrentRoute: 

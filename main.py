@@ -81,6 +81,9 @@ class GameManager:
         self.Generator = SetupGenerator()
         self.Generator.SaveDecisionCsv(self.time_started)
         self.Generator.SaveSetupCsv(self.time_started)
+
+    def ResetGenerator(self):
+        self.InitGenerator()
     
     def InitPlayers(self):
         self.players = LoadPlayerInfo(START_END_PATH, self.time_started, self.GV, self.Generator)
@@ -99,6 +102,7 @@ class GameManager:
 
     def ResetPlayers(self):
         ''' Move all players back to start. Resets position logs to empty.'''
+        self.time_started = datetime.now().strftime("%m%d_%H%M%S")
         self.InitPlayers()
 
     def InitRoadblocks(self):
@@ -207,6 +211,7 @@ class GameManager:
                     self.ResetPlayers()
                     self.ResetRoadblocks()
                     self.ResetCongestions()
+                    self.ResetGenerator()
         return True
 
     def update(self):
