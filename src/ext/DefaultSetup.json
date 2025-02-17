@@ -1,16 +1,28 @@
 {
-    "PlayerSpeed": {
-        "min": 15,
-        "max": 25
-    },
     "n": 1000,
     "Seed": 1,
     "TimeLagActivated" : false,
     "TimeLagMin" : null,
     "TimeLagMax" : null,
-    
     "ReportTimePenaltyActivated" : false,
     "ReportTimePenalty" : null,
+    
+    "PlayerSpeed": {
+        "mean": 20,
+        "std_dev": 5
+    },
+    "ProbPlayerFollowsNavigation": {
+        "mean": 0.6,
+        "std_dev": 0.1
+    },
+    "ProbPlayerReportIfRoadblock": {
+        "mean": 0.7,
+        "std_dev": 0.15
+    },
+    "ProbPlayerReportIfNoRoadblock": {
+        "mean": 0.3,
+        "std_dev": 0.1
+    },
 
     "IsAIControlled": false,
     "ProbOfNextNode": 0.5,
@@ -18,10 +30,6 @@
     "ProbWrongReportIfNoRoadblock": 0.3,
     "ParticipationAmount": 0.017,
     "MinReportDistance": 8000,
-    "MaxReportDistance": "INF",
-    "ProbCorrectRandomReport": 0.6,
-
-    "ProbPlayerFollowsNavigation": 0.8,
-    "ProbPlayerReportsCorrectRoadblock": 0.9,
-    "ProbPlayerReportsRoadblock": 0.5
+    "MaxReportDistance": 10000,
+    "ProbCorrectRandomReport": 0.6
 }

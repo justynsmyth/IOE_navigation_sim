@@ -8,11 +8,11 @@
     "ReportTimePenalty" : null,
     
     "PlayerSpeed": {
-        "mean": 20,
+        "mean": 50,
         "std_dev": 5
     },
     "ProbPlayerFollowsNavigation": {
-        "mean": 0.8,
+        "mean": 0.6,
         "std_dev": 0.1
     },
     "ProbPlayerReportIfRoadblock": {

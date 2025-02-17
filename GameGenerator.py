@@ -27,13 +27,18 @@ class GameGenerator:
         for i in range(self.num_players):
             player_data = {
                 "follows_navigation": self.generate_array_by_probability(self.players_follow_navigation_probabilities[i]), 
+                "follows_navigation_idx": 0,
                 "reports_roadblock_if_roadblock": self.generate_array_by_probability(self.players_report_if_roadblock_probabilities[i]),
+                "reports_roadblock_if_roadblock_idx": 0,
                 "reports_roadblock_no_roadblock": self.generate_array_by_probability(self.players_report_if_no_roadblock_probabilities[i]),
+                "reports_roadblock_no_roadblock_idx": 0,
                 "follow_navigation_prob": self.players_follow_navigation_probabilities[i],
                 "report_roadblock_prob": self.players_report_if_roadblock_probabilities[i],
                 "false_report_no_roadblock_prob": self.players_report_if_no_roadblock_probabilities[i],
+                "NavHistory": []
             }
             self.Players.append(player_data)
+        self.ResetAllPlayerIndices()
         
         # AI Experimenter Setup
         self.TimeLagActivated = settings['TimeLagActivated']
@@ -100,6 +105,15 @@ class GameGenerator:
         # probabilities within [0,1]
         probabilities = np.clip(probabilities, 0, 1)
         return probabilities.tolist()
+    
+    def add_to_nav_history(self, id, time, reason, current_waypoint, route):
+        entry = {
+            "time": time,
+            "reason": reason,
+            "current_waypoint": current_waypoint,
+            "updateRoute": route
+        }
+        self.Players[id]["NavHistory"].append(entry)
 
     def SaveSetupCsv(self, time: str):
         directory = os.path.join('logs', time)
@@ -187,7 +201,7 @@ class GameGenerator:
                             self.ArrTimeLagValues[i]
                             ])
 
-            print("Successfully Saved Decision.csv!")
+            # print("Successfully Saved Decision.csv!")
 
     def SavePlayerDecisionCsv(self, time):
         directory = os.path.join('logs', time)
@@ -198,8 +212,8 @@ class GameGenerator:
             w.writerow(['PlayerID',
                         'Player Speeds',
                         'Player Follows Navigation',
-                        'Player Reports Correct Roadblock',
-                        'Player Reports Roadblock',
+                        'ProbReportIfRoadblock',
+                        'ProbReportIfNoRoadblock',
                         ])
 
             for i, player in enumerate(self.Players):
@@ -212,8 +226,8 @@ class GameGenerator:
             w.writerow(['PlayerID',
                         ' ',
                         'Player Follows Navigation',
-                        'Player Reports Correct Roadblock',
-                        'Player Reports Roadblock',
+                        'ProbReportIfRoadblock',
+                        'ProbReportIfNoRoadblock',
                         ])
             for i, player in enumerate(self.Players):
                 for j in range(self.n):
@@ -223,3 +237,60 @@ class GameGenerator:
                                 player['reports_roadblock_if_roadblock'][j],
                                 player['reports_roadblock_no_roadblock'][j]
                                 ])
+    
+    def SaveNavHistory(self, time):
+        directory = os.path.join('logs', time)
+        os.makedirs(directory, exist_ok=True)
+        file_path = os.path.join(directory, 'NavHistory.csv')
+        with open(file_path, mode='w', newline='') as file:
+            w = csv.writer(file)
+            w.writerow(['ParticipantIdx',
+                        'Time',
+                        'Reason',
+                        'CurrentWaypoint',
+                        'UpdatedRoute',
+                        ])
+            for i, player in enumerate(self.Players):
+                for entry in player['NavHistory']:
+                    w.writerow([i,
+                                entry['time'],
+                                entry['reason'],
+                                entry['current_waypoint'],
+                                entry['updateRoute']
+                                ])    
+
+    # def SaveReportHistory(self, time):
+                    
+
+    def GetNextFollowNavigation(self, id) -> bool:
+        # "reports_roadblock_no_roadblock": self.generate_array_by_probability(self.players_report_if_no_roadblock_probabilities[i]),
+        # "follow_navigation_prob": self.players_follow_navigation_probabilities[i],
+        # "report_roadblock_prob": self.players_report_if_roadblock_probabilities[i],
+        # "false_report_no_roadblock_prob": self.players_report_if_no_roadblock_probabilities[i],
+        idx = self.Players[id]["follows_navigation_idx"]
+        result = self.Players[id]["follows_navigation"][idx]
+        self.Players[id]["follows_navigation_idx"] += 1
+        return result
+
+    def GetNextReportsRoadblockIfRoadblock(self, id) -> bool:
+        # "reports_roadblock_no_roadblock": self.generate_array_by_probability(self.players_report_if_no_roadblock_probabilities[i]),
+        # "follow_navigation_prob": self.players_follow_navigation_probabilities[i],
+        # "report_roadblock_prob": self.players_report_if_roadblock_probabilities[i],
+        # "false_report_no_roadblock_prob": self.players_report_if_no_roadblock_probabilities[i],
+        idx = self.Players[id]["reports_roadblock_if_roadblock_idx"]
+        result = self.Players[id]["reports_roadblock_if_roadblock"][idx]
+        self.Players[id]["reports_roadblock_if_roadblock_idx"] += 1
+        return result
+
+    def GetNextReportsRoadblockIfNoRoadblock(self, id) -> bool:
+        idx = self.Players[id]["reports_roadblock_no_roadblock_idx"]
+        result = self.Players[id]["reports_roadblock_no_roadblock"][idx]
+        self.Players[id]["reports_roadblock_no_roadblock_idx"] += 1
+        return result
+
+    def ResetAllPlayerIndices(self):
+        for player in self.Players:
+            player["reports_roadblock_no_roadblock_idx"] = 0
+            player["reports_roadblock_if_roadblock_idx"] = 0
+            player["follows_navigation_idx"] = 0
+    

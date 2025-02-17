@@ -4,7 +4,7 @@ import sys
 from GraphVisualizer import GraphVisualizer
 from GameGenerator import GameGenerator
 from settings_utils import merge_settings, process_settings, load_settings
-from player import LoadPlayerInfo
+from player import LoadPlayerInfo, Player
 from roadblock import LoadRoadblockInfo
 from congestion import LoadCongestionInfo
 
@@ -58,14 +58,17 @@ class GameManager:
         self.play_button_image = pygame.image.load('src/imgs/play.png')
         self.pause_button_image = pygame.image.load('src/imgs/pause.png')
         self.stop_button_image = pygame.image.load('src/imgs/stop.png')
+        self.save_button_image = pygame.image.load('src/imgs/save.png')
 
         self.play_button_image = pygame.transform.scale(self.play_button_image, (50, 50))
         self.pause_button_image = pygame.transform.scale(self.pause_button_image, (50, 50))
         self.stop_button_image = pygame.transform.scale(self.stop_button_image, (50, 50))
+        self.save_button_image = pygame.transform.scale(self.save_button_image, (50, 50))
 
         self.play_button_rect = self.play_button_image.get_rect(topleft=(10, 10))
         self.pause_button_rect = self.pause_button_image.get_rect(topleft=(70, 10))
         self.stop_button_rect = self.stop_button_image.get_rect(topleft=(130, 10))
+        self.save_button_rect = self.save_button_image.get_rect(topleft=(190, 10))
 
         # Initialize game state
         self.running = False
@@ -77,6 +80,8 @@ class GameManager:
         self.num_completed = 0
         self.time_started = datetime.now().strftime("%m%d_%H%M%S")
 
+        self.selected_player = None
+
     def InitGenerator(self):
         self.Generator = SetupGenerator()
         self.Generator.SaveDecisionCsv(self.time_started)
@@ -84,12 +89,14 @@ class GameManager:
         self.Generator.SavePlayerDecisionCsv(self.time_started)
 
     def ResetGenerator(self):
+        self.Generator = None 
         self.InitGenerator()
     
     def InitPlayers(self):
+        self.players = []
         self.players = LoadPlayerInfo(START_END_PATH, self.time_started, self.GV, self.Generator)
-        for player in self.players:
-            print(player)
+        # for player in self.players:
+        #     print(player)
         self.num_players = len(self.players)
 
     def UpdatePlayers(self):
@@ -104,19 +111,25 @@ class GameManager:
     def ResetPlayers(self):
         ''' Move all players back to start. Resets position logs to empty.'''
         self.time_started = datetime.now().strftime("%m%d_%H%M%S")
+        self.num_completed = 0
+        self.finished_players.clear()
+        self.num_players = 0
+        self.players.clear()
         self.InitPlayers()
+
+    def get_clicked_player(self, mouse_pos) -> Player:
+        for player in self.players:
+            player_pos = player.pos
+            player_rect = pygame.Rect(player_pos[0] - 5, player_pos[1] - 5, 10, 10)
+
+            if player_rect.collidepoint(mouse_pos):
+                return player
+        return None
 
     def InitRoadblocks(self):
         """ Spawns Roadblocks from roadblock.json file """
         self.roadblocks = LoadRoadblockInfo(ROADBLOCK_PATH, self.GV)
-        for roadblock in self.roadblocks:
-            print(roadblock)
     
-    def UpdateRoadblocks(self):
-        """ Draws Roadblock state on Map."""
-        for roadblock in self.roadblocks:
-            roadblock.update()
-
     def ResetRoadblocks(self):
         """ Mark all roadblocks as unreported. """
         self.InitRoadblocks()
@@ -124,8 +137,8 @@ class GameManager:
     def InitCongestions(self):
         """ Spawns Congestions from congestion.json file"""
         self.congestions = LoadCongestionInfo(CONGESTION_PATH, self.GV)
-        for congestion in self.congestions:
-            print(congestion)
+        # for congestion in self.congestions:
+        #     print(congestion)
     
     def ResetCongestions(self):
         """ Rereads the file for congestions."""
@@ -136,6 +149,7 @@ class GameManager:
         self.screen.blit(self.play_button_image, self.play_button_rect)
         self.screen.blit(self.pause_button_image, self.pause_button_rect)
         self.screen.blit(self.stop_button_image, self.stop_button_rect)
+        self.screen.blit(self.save_button_image, self.save_button_rect)
 
     def draw_status_panel(self):
         margin = 10
@@ -180,10 +194,12 @@ class GameManager:
         padding = 10
         map_rect = pygame.Rect(MAP_X + padding, MAP_Y + padding, MAP_WIDTH - 2 * padding, MAP_HEIGHT - 2 * padding)
         pygame.draw.rect(screen, BROWN, map_rect)
-        # Add any extra drawing here
+        # Add any extra drawing here (Order Matters!)
+        if self.selected_player:
+            self.GV.draw_player_path(screen, self.selected_player, map_rect)
         self.GV.draw_graph(screen, map_rect)
-        self.GV.draw_players(screen, self.players, map_rect)
         self.GV.draw_roadblocks(screen, self.roadblocks, map_rect)
+        self.GV.draw_players(screen, self.players, map_rect)
 
     def draw_timer(self):
         if self.running:
@@ -191,6 +207,11 @@ class GameManager:
 
         timer_text = FONT.render(f"Time: {self.time // 1000} sec", True, BLACK)
         screen.blit(timer_text, (20, 120))
+
+    def save_csv_files(self):
+        self.Generator.SaveNavHistory(self.time_started)
+        # self.Generator.SaveReportHistory(self.time_started)
+
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -201,18 +222,30 @@ class GameManager:
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
 
+                for rect, player in self.GV.player_rects:
+                    if rect.collidepoint(mouse_pos):
+                        if self.selected_player == player:
+                            self.selected_player = None
+                        else: 
+                            self.selected_player = player
+                        return True # informs that game is running but can exit function early
+
                 if self.play_button_rect.collidepoint(mouse_pos):
                     if not self.running:
                         self.running = True
                 elif self.pause_button_rect.collidepoint(mouse_pos):
                     self.running = False
                 elif self.stop_button_rect.collidepoint(mouse_pos):
+                    self.save_csv_files()                    
                     self.running = False
                     self.time = 0  # Reset the time accumulator
+                    self.ResetGenerator()
                     self.ResetPlayers()
                     self.ResetRoadblocks()
                     self.ResetCongestions()
-                    self.ResetGenerator()
+                    self.selected_player = None
+                elif self.save_button_rect.collidepoint(mouse_pos):
+                    self.save_csv_files()
         return True
 
     def update(self):
@@ -226,7 +259,6 @@ class GameManager:
 
         if self.running:
             self.UpdatePlayers()
-            self.UpdateRoadblocks()
 
         return self.handle_events()
     
