@@ -17,6 +17,7 @@ PLAYER_IMAGE_DEVIATE_PATH = 'src/imgs/navigation_deviates.png'
 PLAYER_IMAGE_DONE_PATH = 'src/imgs/navigation_green.png'
 ROADBLOCK_REAL_IMAGE_PATH = 'src/imgs/roadblock_base.png'
 ROADBLOCK_FAKE_IMAGE_PATH = 'src/imgs/roadblock_fake_reported.png'
+ROADBLOCK_FAKE_SELECTED_PLAYER_IMAGE_PATH = 'src/imgs/roadblock_fake_reported_following.png'
 ROADBLOCK_REPORTED_IMAGE_PATH = 'src/imgs/roadblock_reported.png'
 ROADBLOCK_IMAGE_SIZE = 50
 PLAYER_IMAGE_SIZE = 35
@@ -58,6 +59,30 @@ class GraphVisualizer:
         self.roadblocks = []
         self.reported_roadblocks = set()
         self.player_rects = []
+        self.num_players_on_edge = {}
+
+        self.images = {
+            'roadblock_real': pygame.image.load(ROADBLOCK_REAL_IMAGE_PATH).convert_alpha(),
+            'roadblock_reported': pygame.image.load(ROADBLOCK_REPORTED_IMAGE_PATH).convert_alpha(),
+            'roadblock_fake': pygame.image.load(ROADBLOCK_FAKE_IMAGE_PATH).convert_alpha(),
+            'roadblock_fake_selected': pygame.image.load(ROADBLOCK_FAKE_SELECTED_PLAYER_IMAGE_PATH).convert_alpha(),
+            'p_default': pygame.image.load(PLAYER_IMAGE_DEFAULT_PATH).convert_alpha(),
+            'p_done': pygame.image.load(PLAYER_IMAGE_DONE_PATH).convert_alpha(),
+            'p_deviate': pygame.image.load(PLAYER_IMAGE_DEVIATE_PATH).convert_alpha(),
+        }
+
+        self.images['roadblock_real'] = pygame.transform.scale(self.images['roadblock_real'], (ROADBLOCK_IMAGE_SIZE, ROADBLOCK_IMAGE_SIZE))
+        self.images['roadblock_reported'] = pygame.transform.scale(self.images['roadblock_reported'], (ROADBLOCK_IMAGE_SIZE, ROADBLOCK_IMAGE_SIZE))
+        self.images['roadblock_fake'] = pygame.transform.scale(self.images['roadblock_fake'], (ROADBLOCK_IMAGE_SIZE, ROADBLOCK_IMAGE_SIZE))
+        self.images['roadblock_fake_selected'] = pygame.transform.scale(self.images['roadblock_fake_selected'], (ROADBLOCK_IMAGE_SIZE, ROADBLOCK_IMAGE_SIZE))
+        self.images['p_default'] = pygame.transform.scale(self.images['p_default'], (PLAYER_IMAGE_SIZE, PLAYER_IMAGE_SIZE))
+        self.images['p_done'] = pygame.transform.scale(self.images['p_done'], (PLAYER_IMAGE_SIZE, PLAYER_IMAGE_SIZE))
+        self.images['p_deviate'] = pygame.transform.scale(self.images['p_deviate'], (PLAYER_IMAGE_SIZE, PLAYER_IMAGE_SIZE))
+
+        for key in ['p_default', 'p_done', 'p_deviate']:
+            transparency = pygame.Surface(self.images[key].get_size(), pygame.SRCALPHA)
+            transparency.fill((255, 255, 255, 200))  # 200 out of 255 for some transparency
+            self.images[key].blit(transparency, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
 
     def load_graph(self, file_path):
         """Load the graph from a JSON file."""
@@ -125,7 +150,7 @@ class GraphVisualizer:
         self.roadblock_map = mp
     
     def InitRoadblocks(self, roadblock: list):
-        self.roadblocks = roadblock
+        self.roadblocks = roadblock # creates reference to roadblocks list
         self.reported_roadblocks = set()
 
     def HasRoadblock(self, node_a, node_b) -> tuple[Roadblock | None, bool]:
@@ -150,10 +175,58 @@ class GraphVisualizer:
     def InitCongestionMap(self, mp):
         """ Called Once during setup. Maps pair of nodes to bool value if exists"""
         self.congestion_map = mp
+
+    def InitCongestionWeightMap(self, mp):
+        self.congestion_weights = mp
+
+    def InitPlayerCongestionMap(self, mp):
+        self.player_congestion = mp
     
     def GetCongestion(self, node_a, node_b) -> float:
-        """Returns the congestion factor (0-1) if congestion exists, otherwise returns 1 (no slowdown)."""
-        return self.congestion_map.get((node_a, node_b), self.congestion_map.get((node_b, node_a), 1.0))
+        """Returns the congestion factor (0-1) if congestion exists, otherwise returns 1 (no slowdown).
+            If PlayerCongestion exists, this takes higher priority and return that congestion factor instead."""
+        if self.congestion_map:
+            road_congestion_factor = self.congestion_map.get((node_a, node_b), self.congestion_map.get((node_b, node_a), 1.0))
+            if self.player_congestion is None:
+                return road_congestion_factor
+            # get the number of players on node_a, node_b edge
+            num_players = self.num_players_on_edge.get((node_a, node_b), self.num_players_on_edge.get((node_b, node_a), 0))
+            return self.player_congestion.get(num_players, road_congestion_factor)
+        return 1.0
+    
+    def ChangePlayerEdgeLocation(self, edge = None , prev_edge = None):
+        # Remove the player from the previous edge
+        if prev_edge is not None:
+            prev_node_a , prev_node_b = prev_edge
+            prev_edge_a_b = (prev_node_a, prev_node_b)
+            prev_edge_b_a = (prev_node_b, prev_node_a)
+            if self.num_players_on_edge.get(prev_edge_a_b, 0) > 0:
+                self.num_players_on_edge[prev_edge_a_b] -= 1
+            elif self.num_players_on_edge.get(prev_edge_b_a, 0) > 0:
+                self.num_players_on_edge[prev_edge_b_a] -= 1
+            else:
+                print(f"Error: Attempted to remove from an edge with zero players! ({prev_node_a}, {prev_node_b})")
+                exit(1)
+        # Add the player to the current edge
+        # if the edge is (b, a) and exists, increment that, otherwise increment (a, b)
+        if edge is not None:
+            node_a, node_b = edge
+            edge_a_b = (node_a, node_b)
+            edge_b_a = (node_b, node_a)
+
+            if edge_b_a in self.num_players_on_edge:
+                self.num_players_on_edge[edge_b_a] += 1
+            else:
+                self.num_players_on_edge[edge_a_b] = self.num_players_on_edge.get(edge_a_b, 0) + 1
+
+    
+    def GetCongestionMultiplier(self, congestion_factor, congestion_weights):
+        """Given a congestion factor (0-1), return the distance multipler."""
+        for (low, high), multiplier in congestion_weights:
+            if low <= congestion_factor < high:
+                return multiplier
+        return None  # Return None if no range matches
+
 
     def transform_position(self, x, y, scale, offset_x, offset_y, min_x, min_y):
         """Transforms the position based on scaling and offset."""
@@ -208,23 +281,16 @@ class GraphVisualizer:
             if pos:
                 x, y = self.transform_position(pos[0], pos[1], scale, offset_x, offset_y, min_x, min_y)
                 
-                # Load the player image and scale it
-                player_image = pygame.image.load(PLAYER_IMAGE_DEFAULT_PATH).convert_alpha()
                 if hasattr(player, 'finished') and player.finished:
-                    player_image = pygame.image.load(PLAYER_IMAGE_DONE_PATH).convert_alpha()
+                    player_image = self.images['p_done']
                 elif player.deviates:
-                    player_image = pygame.image.load(PLAYER_IMAGE_DEVIATE_PATH).convert_alpha()
- 
-                player_image = pygame.transform.scale(player_image, (PLAYER_IMAGE_SIZE, PLAYER_IMAGE_SIZE))
+                    player_image = self.images['p_deviate']
+                else:
+                    player_image = self.images['p_default']
 
-                # Make the player image slightly transparent
-                transparency = pygame.Surface(player_image.get_size(), pygame.SRCALPHA)
-                transparency.fill((255, 255, 255, 200))  # 200 out of 255 for some transparency
-                player_image.blit(transparency, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-                
                 # Rotate the image for each player (if needed)
                 rotated_image = pygame.transform.rotate(player_image, player.direction)
-                
+
                 # Get the rect for the rotated image and set its position
                 rotated_rect = rotated_image.get_rect(center=(x, y))
 
@@ -234,36 +300,61 @@ class GraphVisualizer:
                 screen.blit(rotated_image, rotated_rect)
 
     def draw_player_path(self, screen, selected_player, map_rect):
-        """Draw the player's path as a light blue line on the screen."""
-        scale, offset_x, offset_y, min_x, min_y = self.calculate_scaling_and_offset(map_rect)
+        """Draw the player's path as a light blue line on the screen. If they are deviated, purple line."""
+        if not hasattr(self, 'path_surface'):
+            # Create a surface for the path if it doesn't exist
+            self.path_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+            self.last_path = None  # Track the last path drawn
 
         path = selected_player.path  # List of nodes forming the path
-        if len(path) < 2:
-            return  # No need to draw if there are less than two nodes
-        
-        path_surface = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        deviating = selected_player.deviates
 
-        for i in range(len(path) - 1):
-            x1, y1 = self.transform_position(*self.pos[path[i]], scale, offset_x, offset_y, min_x, min_y)
-            x2, y2 = self.transform_position(*self.pos[path[i + 1]], scale, offset_x, offset_y, min_x, min_y)
+        # Only redraw if the path or deviation status has changed
+        if path != self.last_path or deviating != self.last_deviating:
+            self.last_path = path
+            self.last_deviating = deviating
 
-            pygame.draw.line(path_surface, (173, 216, 230, 128), (x1, y1), (x2, y2), 5)
-        
-        screen.blit(path_surface, (0, 0))
-    def draw_roadblocks(self, screen, roadblocks: list[Roadblock], map_rect):
-        """Draw the roadblocks on the Pygame screen."""
+            line_color = (173, 216, 230, 128)  # Light blue with alpha
+            if deviating:
+                line_color = (147, 112, 219, 128)  # Purple with alpha
+
+            if len(path) < 2:
+                return  # No need to draw if there are less than two nodes
+
+            # Clear the path surface
+            self.path_surface.fill((0, 0, 0, 0))  # Fill with transparent color
+
+            scale, offset_x, offset_y, min_x, min_y = self.calculate_scaling_and_offset(map_rect)
+
+            for i in range(len(path) - 1):
+                x1, y1 = self.transform_position(*self.pos[path[i]], scale, offset_x, offset_y, min_x, min_y)
+                x2, y2 = self.transform_position(*self.pos[path[i + 1]], scale, offset_x, offset_y, min_x, min_y)
+
+                pygame.draw.line(self.path_surface, line_color, (x1, y1), (x2, y2), 5)
+
+        screen.blit(self.path_surface, (0, 0))       
+         
+    def draw_roadblocks(self, screen, roadblocks: list[Roadblock], map_rect, selected_player=None):
+        """Draw the roadblocks on the Pygame screen. If selected_player exists, any reported roadblocks will turn purple."""
         scale, offset_x, offset_y, min_x, min_y = self.calculate_scaling_and_offset(map_rect)
 
         for roadblock in roadblocks:
             pos = roadblock.pos
             x, y = self.transform_position(pos[0], pos[1], scale, offset_x, offset_y, min_x, min_y)
-            roadblock_img = pygame.image.load(ROADBLOCK_REAL_IMAGE_PATH).convert_alpha()
+
             if roadblock.real:
                 if roadblock.reported:
-                    roadblock_img = pygame.image.load(ROADBLOCK_REPORTED_IMAGE_PATH)
+                    roadblock_img = self.images['roadblock_reported']
+                else:
+                    roadblock_img = self.images['roadblock_real']
             else:
-                roadblock_img = pygame.image.load(ROADBLOCK_FAKE_IMAGE_PATH)
+                if selected_player is not None and (
+                    (roadblock.node_a, roadblock.node_b) in selected_player.false_roadblocks or 
+                    (roadblock.node_b, roadblock.node_a) in selected_player.false_roadblocks
+                ):
+                    roadblock_img = self.images['roadblock_fake_selected']
+                else:
+                    roadblock_img = self.images['roadblock_fake']
 
-            roadblock_img = pygame.transform.scale(roadblock_img, (ROADBLOCK_IMAGE_SIZE, ROADBLOCK_IMAGE_SIZE))
             roadblock_rect = roadblock_img.get_rect(center=(x, y))
             screen.blit(roadblock_img, roadblock_rect)

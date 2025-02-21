@@ -7,6 +7,8 @@ from datetime import datetime
 import os
 from GameGenerator import GameGenerator
 from GraphVisualizer import GraphVisualizer
+from collections import deque
+
 
 class Player:
     def __init__(self, player_id, start_node, end_node, graph_visualizer : GraphVisualizer, gen : GameGenerator, speed, time):
@@ -25,6 +27,8 @@ class Player:
         self.speed = speed
 
         self.create_position_csv()
+        self.position_buffer = []  # Buffer to store position logs
+        self.buffer_size = 100  # Number of logs to batch before writing
 
         self.RoadblockOnPrevRoute = False
         self.CheckedRoadblockOnCurrentRoute = False
@@ -35,17 +39,18 @@ class Player:
         self.false_roadblocks = set() # personal list of roadblocks that were falsely reported by player
 
         self.curr_node_id = start_node 
-        self.path = Djikstra(self.curr_node_id, self.end, self.GV) # Precomputed path. Needs to be updated frequently
-        self.curr_node_id = start_node
+        self.path = Djikstra(self.curr_node_id, self.end, self.GV)
         print(f"player {self.id} started at {start_node}")
-        self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Initial", self.curr_node_id, self.path.copy())
+        self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Initial", self.curr_node_id, self.path)
         self.dest_node = self.path[1]
+
+        self.curr_edge = (self.curr_node_id, self.dest_node)
+        self.GV.ChangePlayerEdgeLocation(self.curr_edge, None)
+
         self.is_initial = True
 
-        self.deviation_ticks = 0  # Number of update cycles to show deviation effect
-        self.deviation_duration = 10  # Adjust this to control how long the effect lasts
         self.deviates = False
-
+        
 
 
     def __repr__(self):
@@ -93,13 +98,25 @@ class Player:
         self.curr_node_id = node_id
 
     def log_position(self):
-        """Log the current position to a CSV file."""
+        """Log the current position to a buffer and write to CSV in batches."""
         pos_x, pos_y = self.pos
+        time = datetime.now().strftime('%H:%M:%S.%f')
+        self.position_buffer.append([self.id, time, pos_x, pos_y])
 
+        if len(self.position_buffer) >= self.buffer_size:
+            self._flush_buffer()
+        
+    def _flush_buffer(self):
+        """Write the buffer to the CSV file and clear the buffer."""
         with open(self.position_csv, mode='a', newline='') as file:
             writer = csv.writer(file)
-            time = datetime.now().strftime('%H:%M:%S.%f')
-            writer.writerow([self.id, time ,pos_x, pos_y])
+            writer.writerows(self.position_buffer)
+        self.position_buffer.clear()
+
+    def __del__(self):
+        """Ensure the buffer is flushed when the Player object is destroyed."""
+        if self.position_buffer:
+            self._flush_buffer()
 
     def create_position_csv(self):
         """Creates new log position"""
@@ -111,6 +128,7 @@ class Player:
             w.writerow(['Player', 'Time', 'posX', 'posY'])
     
     def player_finish(self):
+        self.GV.ChangePlayerEdgeLocation(None, self.curr_edge)
         self.finished = True
     
     def calculate_direction(self, curr_pos, dest_pos):
@@ -140,6 +158,12 @@ class Player:
             self.RoadblockOnPrevRoute = False
             self.CheckedRoadblockOnCurrentRoute = False
             self.traveled_distance = 0  # reset back to zero
+
+            # update curr_edge
+            prev_edge = self.curr_edge
+            self.curr_edge = (self.curr_node_id, self.dest_node)
+            self.GV.ChangePlayerEdgeLocation(self.curr_edge, prev_edge)
+
             return False
         else:
             assert(self.path[0] == self.end)
@@ -150,14 +174,14 @@ class Player:
         '''Checks if the player has decided to follow the navigation or not.'''
         follow_nav = self.Gen.GetNextFollowNavigation(self.id)
         if follow_nav:
+            self.deviates = False
             if not self.is_initial:
-                self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Waypoint Reached", self.curr_node_id, self.path.copy())
+                self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Waypoint Reached", self.curr_node_id, self.path)
         else:
             print(f"Player {self.id} decides to deviate from navigation")
             # If a player is returning to their origin node (due to roadblock)
             # player will find its own path given its known roadblocks, the path it does not want to take, and will still traverse path that it knows are false roadblocks
             self.deviates = True
-            self.deviation_ticks = self.deviation_duration 
             self.path = Djikstra(self.curr_node_id, self.end, self.GV, self.known_roadblocks, {(self.curr_node_id, self.path[1])}, self.false_roadblocks)
     
     def OnPlayerReturnsFromRoadblock(self):
@@ -167,26 +191,21 @@ class Player:
         if self.ReportIfRoadblock:
             print(f"System finding new route for player {self.id} due to roadblock report")
             self.path = Djikstra(self.curr_node_id, self.end, self.GV, None, None, None, True)
+            self.deviates = False
             print(f"New path: {self.path}")
             self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Detour", self.curr_node_id, self.path.copy()) 
         else:
             # Player did not report. Player will need to find next best path given its own knowledge.
             self.path = Djikstra(self.curr_node_id, self.end, self.GV, self.known_roadblocks, None, self.false_roadblocks)
-        
-    def checkForDeviationTimer(self):
-        if self.deviation_ticks > 0:
-            self.deviation_ticks -= 1
             self.deviates = True
-        else:
-            self.deviates = False
-
+        
     def update(self):
         """Update the position and direction over time. Checks for Roadblock."""
         # Has player reached a dest_node by their .t value exceededing the normalized progress (1 is max)
         # If initial, still need to check if the player will deviate or not
-        self.checkForDeviationTimer()
         if self.t >= 1:
-            self.path.pop(0) # delete prev node from current pathi=
+            if self.dest_node != self.curr_node_id:
+                self.path.popleft() # delete prev node from current path
             if len(self.path) > 1:
                 self.set_curr_node_id(self.dest_node)
                 if self.RoadblockOnPrevRoute:

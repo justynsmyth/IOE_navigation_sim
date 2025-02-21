@@ -8,6 +8,9 @@ from player import LoadPlayerInfo, Player
 from roadblock import LoadRoadblockInfo
 from congestion import LoadCongestionInfo
 
+import cProfile
+
+
 pygame.init()
 
 # Screen dimensions
@@ -55,20 +58,24 @@ class GameManager:
         pygame.display.set_caption("Simulator")
 
         # Load images for buttons
-        self.play_button_image = pygame.image.load('src/imgs/play.png')
-        self.pause_button_image = pygame.image.load('src/imgs/pause.png')
-        self.stop_button_image = pygame.image.load('src/imgs/stop.png')
-        self.save_button_image = pygame.image.load('src/imgs/save.png')
+        self.images = {
+            'play': pygame.image.load('src/imgs/play.png').convert_alpha(),
+            'pause': pygame.image.load('src/imgs/pause.png').convert_alpha(),
+            'stop': pygame.image.load('src/imgs/stop.png').convert_alpha(),
+            'save': pygame.image.load('src/imgs/save.png').convert_alpha(),
+        }
 
-        self.play_button_image = pygame.transform.scale(self.play_button_image, (50, 50))
-        self.pause_button_image = pygame.transform.scale(self.pause_button_image, (50, 50))
-        self.stop_button_image = pygame.transform.scale(self.stop_button_image, (50, 50))
-        self.save_button_image = pygame.transform.scale(self.save_button_image, (50, 50))
+        # Resize the images
+        self.images['play'] = pygame.transform.scale(self.images['play'], (50, 50))
+        self.images['pause'] = pygame.transform.scale(self.images['pause'], (50, 50))
+        self.images['stop'] = pygame.transform.scale(self.images['stop'], (50, 50))
+        self.images['save'] = pygame.transform.scale(self.images['save'], (50, 50))
 
-        self.play_button_rect = self.play_button_image.get_rect(topleft=(10, 10))
-        self.pause_button_rect = self.pause_button_image.get_rect(topleft=(70, 10))
-        self.stop_button_rect = self.stop_button_image.get_rect(topleft=(130, 10))
-        self.save_button_rect = self.save_button_image.get_rect(topleft=(190, 10))
+        # Define button positions
+        self.play_button_rect = self.images['play'].get_rect(topleft=(10, 10))
+        self.pause_button_rect = self.images['pause'].get_rect(topleft=(70, 10))
+        self.stop_button_rect = self.images['stop'].get_rect(topleft=(130, 10))
+        self.save_button_rect = self.images['save'].get_rect(topleft=(190, 10))
 
         # Initialize game state
         self.running = False
@@ -80,7 +87,7 @@ class GameManager:
         self.num_completed = 0
         self.time_started = datetime.now().strftime("%m%d_%H%M%S")
 
-        self.selected_player = None
+        self.selected_player: Player | None = None
 
     def InitGenerator(self):
         self.Generator = SetupGenerator()
@@ -95,9 +102,8 @@ class GameManager:
     def InitPlayers(self):
         self.players = []
         self.players = LoadPlayerInfo(START_END_PATH, self.time_started, self.GV, self.Generator)
-        # for player in self.players:
-        #     print(player)
         self.num_players = len(self.players)
+        self.finished_players = []
 
     def UpdatePlayers(self):
         self.finished_players = [player for player in self.players if player.finished]
@@ -146,10 +152,10 @@ class GameManager:
 
 
     def draw_buttons(self):
-        self.screen.blit(self.play_button_image, self.play_button_rect)
-        self.screen.blit(self.pause_button_image, self.pause_button_rect)
-        self.screen.blit(self.stop_button_image, self.stop_button_rect)
-        self.screen.blit(self.save_button_image, self.save_button_rect)
+        self.screen.blit(self.images['play'], self.play_button_rect)
+        self.screen.blit(self.images['pause'], self.pause_button_rect)
+        self.screen.blit(self.images['stop'], self.stop_button_rect)
+        self.screen.blit(self.images['save'], self.save_button_rect)
 
     def draw_status_panel(self):
         margin = 10
@@ -158,7 +164,7 @@ class GameManager:
 
         outer_x = margin
         outer_y = 80 + margin
-        outer_width = HISTORY_PANEL_WIDTH - 2 * margin
+        outer_width = (HISTORY_PANEL_WIDTH/ 2) - 2 * margin
         outer_height = STATUS_PANEL_HEIGHT - 2 * margin
 
         pygame.draw.rect(screen, GRAY, (outer_x, outer_y, outer_width, outer_height))
@@ -190,6 +196,61 @@ class GameManager:
         history_text = FONT.render("Report History", True, BLACK)
         screen.blit(history_text, (text_x, text_y))
 
+    def draw_target_player(self):
+        '''If a player is picked, it will display information about them.'''
+        margin = 10
+        padding = 10
+        half_padding = 5
+
+        outer_x = margin + (HISTORY_PANEL_WIDTH / 2)
+        outer_y = 80 + margin - (STATUS_PANEL_HEIGHT - 2 * margin)
+        outer_width = (HISTORY_PANEL_WIDTH/ 2) - 2 * margin
+        outer_height = (STATUS_PANEL_HEIGHT - 2 * margin) * 2
+
+        pygame.draw.rect(screen, GRAY, (outer_x, outer_y, outer_width, outer_height))
+
+        text_x = outer_x + padding
+        text_y = outer_y + half_padding
+
+        follow_player_text = "Following Player:"
+        speed_text = "Speed:"
+        dest_node_text = "End:"
+        next_nav_text = "Next Follows Nav:"
+        next_report_roadblock_text = "Next Report Roadblock:"
+        next_report_no_roadblock_text = "Next Report No Roadblock:"
+        if self.selected_player:
+            follow_player_text += f" {self.selected_player.id}"
+            speed_text += f" {self.selected_player.speed}"
+            dest_node_text += f" {self.selected_player.end}"
+            # All information for player decisions
+            player_data = self.selected_player.Gen.Players[self.selected_player.id]
+
+            next_nav_idx = player_data["follows_navigation_idx"]
+            if next_nav_idx < len(player_data["follows_navigation"]):
+                next_nav_text += f" {player_data['follows_navigation'][next_nav_idx]}"
+
+            next_report_roadblock_idx = player_data["reports_roadblock_if_roadblock_idx"]
+            if next_report_roadblock_idx < len(player_data["reports_roadblock_if_roadblock"]):
+                next_report_roadblock_text += f" {player_data['reports_roadblock_if_roadblock'][next_report_roadblock_idx]}"
+
+            next_report_no_roadblock_idx = player_data["reports_roadblock_no_roadblock_idx"]
+            if next_report_no_roadblock_idx < len(player_data["reports_roadblock_no_roadblock"]):
+                next_report_no_roadblock_text += f" {player_data['reports_roadblock_no_roadblock'][next_report_no_roadblock_idx]}" 
+
+        follow_player = FONT.render(follow_player_text, True, BLACK)
+        player_speed = FONT.render(speed_text, True, BLACK)
+        dest_node = FONT.render(dest_node_text, True, BLACK)
+        next_nav = FONT.render(next_nav_text, True, BLACK)
+        next_report_roadblock = FONT.render(next_report_roadblock_text, True, BLACK)
+        next_report_no_roadblock = FONT.render(next_report_no_roadblock_text, True, BLACK)
+
+        screen.blit(follow_player, (text_x, text_y))
+        screen.blit(player_speed, (text_x, text_y + 25))
+        screen.blit(dest_node, (text_x, text_y + 50))
+        screen.blit(next_nav, (text_x, text_y + 75))
+        screen.blit(next_report_roadblock, (text_x, text_y + 100))
+        screen.blit(next_report_no_roadblock, (text_x, text_y + 125))
+
     def draw_map(self):
         padding = 10
         map_rect = pygame.Rect(MAP_X + padding, MAP_Y + padding, MAP_WIDTH - 2 * padding, MAP_HEIGHT - 2 * padding)
@@ -198,7 +259,7 @@ class GameManager:
         if self.selected_player:
             self.GV.draw_player_path(screen, self.selected_player, map_rect)
         self.GV.draw_graph(screen, map_rect)
-        self.GV.draw_roadblocks(screen, self.roadblocks, map_rect)
+        self.GV.draw_roadblocks(screen, self.roadblocks, map_rect, self.selected_player)
         self.GV.draw_players(screen, self.players, map_rect)
 
     def draw_timer(self):
@@ -254,6 +315,7 @@ class GameManager:
         self.draw_buttons()
         self.draw_status_panel()
         self.draw_report_history()
+        self.draw_target_player()
         self.draw_map()
         self.draw_timer()
 
@@ -278,11 +340,18 @@ def main():
     game_manager.InitRoadblocks()
     game_manager.InitCongestions()
 
-    playing = True 
+    # Profile the main loop
+    profiler = cProfile.Profile()
+    profiler.enable()
+
+    playing = True
     while playing:
         playing = game_manager.update()
         pygame.display.flip()
         clock.tick(60)
+
+    profiler.disable()
+    profiler.print_stats(sort='cumulative')
 
     pygame.quit()
     sys.exit()

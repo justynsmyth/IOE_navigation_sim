@@ -111,7 +111,7 @@ class GameGenerator:
             "time": time,
             "reason": reason,
             "current_waypoint": current_waypoint,
-            "updateRoute": route
+            "updateRoute": list(route)
         }
         self.Players[id]["NavHistory"].append(entry)
 
