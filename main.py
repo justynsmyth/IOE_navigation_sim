@@ -143,8 +143,6 @@ class GameManager:
     def InitCongestions(self):
         """ Spawns Congestions from congestion.json file"""
         self.congestions = LoadCongestionInfo(CONGESTION_PATH, self.GV)
-        # for congestion in self.congestions:
-        #     print(congestion)
     
     def ResetCongestions(self):
         """ Rereads the file for congestions."""
