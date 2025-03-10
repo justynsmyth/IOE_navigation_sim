@@ -36,7 +36,9 @@ class Player:
         self.t = 0 # used for interpolation
         self.direction = 0
 
-        self.finished = False 
+        self.finished = False # Indicate whether a player has finished the game
+        self.failed = False # Indicates when a player cannot progress the game and is in a failed state
+
         self.speed = speed
 
         self.create_position_csv()
@@ -146,6 +148,10 @@ class Player:
         self.curr_node_id = self.end
         self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Finish", self.curr_node_id, self.path)
 
+    def player_failed(self):
+        self.GV.ChangePlayerEdgeLocation(None, self.curr_edge)
+        self.failed = True
+        self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Failed", self.curr_node_id, [])
     
     def calculate_direction(self, curr_pos, dest_pos):
         """Calculate the direction angle from curr_pos to dest_pos."""
@@ -182,7 +188,6 @@ class Player:
 
             return False
         else:
-            assert(self.path[0] == self.end)
             self.player_finish() 
             return True
         
@@ -195,32 +200,50 @@ class Player:
 
         follow_nav = self.Gen.GetNextFollowNavigation(self.id)
         if follow_nav:
-            self.deviates = False          
+            self.deviates = False
+            self.path = Djikstra(self.curr_node_id, self.end, self.GV, None, None, True)
         else:
             logger.info(f"Player {self.id} decides to deviate from navigation")
             # If a player is returning to their origin node (due to roadblock)
             # player will find its own path given its known roadblocks, the path it does not want to take, and will still traverse path that it knows are false roadblocks
             self.deviates = True
-            self.path = Djikstra(self.curr_node_id, self.end, self.GV, self.known_roadblocks, {(self.curr_node_id, self.path[1])}, self.false_roadblocks)
-            # self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Deviating", self.curr_node_id, self.path)
+            next_path = (self.curr_node_id, self.path[1]) if (len(self.path) > 1) else None
+            self.path = Djikstra(self.curr_node_id, self.end, self.GV, self.known_roadblocks, {next_path})
 
+    def CheckForFailure(self) -> bool:
+        '''Checks if the player is unable to move due to false roadblocks or no viable path to the destination:
+            The navigator, using its knowledge of all reported roadblocks, determined that there is no viable path to the destination.
+            The player can only proceed if they decide to deviate from the navigator's instructions:
+            If the player strictly follows the navigator and the navigator indicates no viable path, the player is in a failed state.
+            If the player chooses to ignore the navigator when it reports no viable path, the player can continue if they know an alternative route (e.g., if they are aware of fake roadblocks).
+            If the player decides to deviate from the navigator even when a valid path exists, and this deviation results in the player being unable to move, the player is in a failed state.
+        '''
+        if (len(self.path) == 1):
+            if self.path[0] != self.curr_node_id:
+                if (self.deviates):
+                    logger.info(f"Player {self.id} failed to find a different path to destination while deviating from the navigator")
+                if (not self.deviates):
+                    logger.info(f"Player {self.id} failed to proceed while trusting the navigator (navigator reported no viable path)")
+                self.player_failed()
+                return True
+        return False
     
-    def OnPlayerReturnsFromRoadblock(self):
+    def OnPlayerReturnsFromRoadblock(self) -> bool:
         '''Function called when player returns from a roadblock.'''
         # If player reported roadblock, Djikstra will automatically find best path for player
         # Will try and avoid any paths reported already
         if self.ReportIfRoadblock:
             logger.info(f"System finding new route for player {self.id} due to roadblock report")
-            self.path = Djikstra(self.curr_node_id, self.end, self.GV, None, None, None, True)
+            self.path = Djikstra(self.curr_node_id, self.end, self.GV, None, None,True)
             self.deviates = False
             logger.info(f"New path: {self.path}")
             self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Detour from Reported Roadblock", self.curr_node_id, self.path.copy()) 
         else:
             # Player did not report. Player will need to find next best path given its own knowledge.
             logger.info(f"Player {self.id} decides to not report roadblock. Detouring")
-            self.path = Djikstra(self.curr_node_id, self.end, self.GV, self.known_roadblocks, None, self.false_roadblocks)
+            self.path = Djikstra(self.curr_node_id, self.end, self.GV, self.known_roadblocks)
             self.deviates = True
-            self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Detoured from No Report", self.curr_node_id, self.path.copy()) 
+            self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Detoured from Non-Reported Roadblock", self.curr_node_id, self.path.copy()) 
             
         
     def update(self):
@@ -235,6 +258,8 @@ class Player:
                 if self.RoadblockOnPrevRoute:
                     self.OnPlayerReturnsFromRoadblock()
                 self.CheckPlayerFollowsNav()
+                if self.CheckForFailure():
+                    return
             if self.SetPlayerPath():
                 return
         elif self.is_initial:
@@ -274,11 +299,10 @@ class Player:
         interpolated_y = y2 + self.t * (y1 - y2)
         self.set_pos((interpolated_x, interpolated_y))
 
-        # Track traveled distance
         self.traveled_distance += adjusted_speed * delta_t
 
         if self.traveled_distance >= self.check_distance:
-            _, exists = self.GV.HasRoadblock(self.curr_node_id, self.dest_node)
+            _, exists = self.GV.HasRoadblock(self.curr_node_id, self.dest_node, )
             if exists and not self.RoadblockOnPrevRoute:
                 logger.info(f"Roadblock detected between {self.curr_node_id} and {self.dest_node}. Returning to current node.")
                 # Detour back to current node
@@ -286,7 +310,7 @@ class Player:
 
                 self.ReportIfRoadblock = self.Gen.GetNextReportsRoadblockIfRoadblock(self.id)
                 if self.ReportIfRoadblock:
-                    self.GV.ReportRoadblock(self.curr_node_id, self.dest_node)
+                    self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node)
                     logger.info(f"Player {self.id} reported roadblock between {self.curr_node_id} and {self.dest_node}")
 
                 self.dest_node = self.curr_node_id  # Set destination to current node
@@ -298,7 +322,7 @@ class Player:
             elif not self.CheckedRoadblockOnCurrentRoute:
                 ReportRoadblockIfNoRoadblock = self.Gen.GetNextReportsRoadblockIfNoRoadblock(self.id)
                 if ReportRoadblockIfNoRoadblock:
-                    self.GV.ReportRoadblock(self.curr_node_id, self.dest_node)
+                    self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node)
                     logger.info(f"Player {self.id} false reported a roadblock between {self.curr_node_id} and {self.dest_node}")
                     self.false_roadblocks.add((self.curr_node_id, self.dest_node))
                 self.CheckedRoadblockOnCurrentRoute = True

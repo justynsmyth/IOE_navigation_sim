@@ -7,6 +7,7 @@ from settings_utils import merge_settings, process_settings, load_settings
 from player import LoadPlayerInfo, Player
 from roadblock import LoadRoadblockInfo
 from congestion import LoadCongestionInfo
+from ReportManager import ReportManager
 
 import cProfile
 
@@ -27,6 +28,8 @@ BROWN = (88, 44, 44)
 # Fonts
 pygame.font.init()
 FONT = pygame.font.SysFont('Arial', 16)
+TITLE_FONT = pygame.font.SysFont('Arial', 20, bold=True)
+
 
 # Layout Dimensions
 BUTTON_WIDTH, BUTTON_HEIGHT = 40, 40
@@ -51,8 +54,9 @@ CONGESTION_PATH = "src/ext/congestion.json"
 
 
 class GameManager:
-    def __init__(self, DrawManager):
-        self.GV = DrawManager
+    def __init__(self):
+        self.RM = ReportManager()
+        self.GV = GraphVisualizer(GRAPH_FILE_PATH, self.RM)
 
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Simulator")
@@ -85,9 +89,16 @@ class GameManager:
         # Game Related information
         self.num_players = 0
         self.num_completed = 0
+        self.num_failed = 0
         self.time_started = datetime.now().strftime("%m%d_%H%M%S")
 
         self.selected_player: Player | None = None
+
+        self.scroll_y = 0
+        self.scroll_speed = 15
+        self.can_scroll = False
+
+        self.next_report_y = 25
 
     def InitGenerator(self):
         self.Generator = SetupGenerator()
@@ -104,21 +115,29 @@ class GameManager:
         self.players = LoadPlayerInfo(START_END_PATH, self.time_started, self.GV, self.Generator)
         self.num_players = len(self.players)
         self.finished_players = []
+        self.failed_players = []
 
     def UpdatePlayers(self):
+        """Update players' status and move finished/failed players to their respective lists."""
         self.finished_players = [player for player in self.players if player.finished]
-        unfinished_players = [player for player in self.players if not player.finished] 
+        self.failed_players = [player for player in self.players if player.failed]
+        unfinished_players = [player for player in self.players if not player.finished and not player.failed]
         for player in unfinished_players:
             player.update()
             if player.finished:
                 self.num_completed += 1
                 self.finished_players.append(player)
+            elif player.failed:
+                self.num_failed += 1
+                self.failed_players.append(player)
 
     def ResetPlayers(self):
         ''' Move all players back to start. Resets position logs to empty.'''
         self.time_started = datetime.now().strftime("%m%d_%H%M%S")
         self.num_completed = 0
+        self.num_failed = 0
         self.finished_players.clear()
+        self.failed_players.clear()
         self.num_players = 0
         self.players.clear()
         self.InitPlayers()
@@ -138,6 +157,7 @@ class GameManager:
     
     def ResetRoadblocks(self):
         """ Mark all roadblocks as unreported. """
+        self.RM.ReportHistory = []
         self.InitRoadblocks()
 
     def InitCongestions(self):
@@ -146,6 +166,7 @@ class GameManager:
     
     def ResetCongestions(self):
         """ Rereads the file for congestions."""
+        self.GV.num_players_on_edge = {}
         self.InitCongestions()
 
 
@@ -171,16 +192,14 @@ class GameManager:
         text_y = outer_y + half_padding
 
         status_text = FONT.render("Status:", True, BLACK)
-        time_text = FONT.render(f"Time since started: {self.time // 1000} sec", True, BLACK)
         completed_text = FONT.render(f"Number of people completed: {self.num_completed}/{self.num_players}", True, BLACK)
 
         screen.blit(status_text, (text_x, text_y))
         screen.blit(completed_text, (text_x, text_y + 50))
 
     def draw_report_history(self):
-        margin = 10 
+        margin = 10
         padding = 10
-
         outer_x = margin
         outer_y = 180 + margin
         outer_width = HISTORY_PANEL_WIDTH - 2 * margin
@@ -188,11 +207,26 @@ class GameManager:
 
         pygame.draw.rect(screen, GRAY, (outer_x, outer_y, outer_width, outer_height))
 
-        text_x = outer_x + padding
-        text_y = outer_y + padding
+        if self.RM.content_height > outer_height:
+            self.can_scroll = True
 
-        history_text = FONT.render("Report History", True, BLACK)
-        screen.blit(history_text, (text_x, text_y))
+        content_surface = pygame.Surface((outer_width, outer_height))
+        content_surface.fill(GRAY)  # Clear the surface with the background color
+
+        # Render the "Report History" title
+        title_text = TITLE_FONT.render("Report History", True, BLACK)
+        title_height = title_text.get_height()
+        content_surface.blit(title_text, (padding, padding))
+
+        # Render the reports below the title
+        text_y = padding + title_height + 10  # Start rendering reports below the title
+        for report in self.RM.Reports:
+            text = FONT.render(report, True, BLACK)
+            content_surface.blit(text, (padding, text_y))
+            text_y += self.RM.report_spacing  # Move down for the next report
+
+        # Draw the content surface onto the screen, adjusted by the scroll_y value
+        screen.blit(content_surface, (outer_x, outer_y), (0, -self.scroll_y, outer_width, outer_height))
 
     def draw_target_player(self):
         '''If a player is picked, it will display information about them.'''
@@ -269,14 +303,13 @@ class GameManager:
 
     def save_csv_files(self):
         self.Generator.SaveNavHistory(self.time_started)
-        # self.Generator.SaveReportHistory(self.time_started)
-
+        self.RM.SaveReportHistory(self.time_started, self.GV.roadblock_map, self.GV.fake_roadblock_map)
 
     def handle_events(self):
+        margin = 10
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
-
             # Check for button clicks
             if event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = pygame.mouse.get_pos()
@@ -299,22 +332,26 @@ class GameManager:
                     self.running = False
                     self.time = 0  # Reset the time accumulator
                     self.ResetGenerator()
+                    self.ResetCongestions()
                     self.ResetPlayers()
                     self.ResetRoadblocks()
-                    self.ResetCongestions()
                     self.selected_player = None
+                    self.RM.ResetReportManager()
                 elif self.save_button_rect.collidepoint(mouse_pos):
                     self.save_csv_files()
+                if self.can_scroll:
+                    if event.button == 4: # Scroll up
+                        self.scroll_y = min(self.scroll_y + self.scroll_speed, 0)
+                    elif event.button == 5: # Scroll Down
+                        self.scroll_y = max(self.scroll_y - self.scroll_speed, -(self.RM.content_height - (SCREEN_HEIGHT - 180 - 2 * margin)))
         return True
-
     def update(self):
         screen.fill(WHITE)
-
         self.draw_buttons()
         self.draw_status_panel()
+        self.draw_map() # needs to be in front of report history for draw order (Black boxes in report history)
         self.draw_report_history()
         self.draw_target_player()
-        self.draw_map()
         self.draw_timer()
 
         if self.running:
@@ -331,8 +368,7 @@ def SetupGenerator() -> GameGenerator:
     return Generator
 
 def main():
-    DrawManager = GraphVisualizer(GRAPH_FILE_PATH)
-    game_manager = GameManager(DrawManager)
+    game_manager = GameManager()
     game_manager.InitGenerator()
     game_manager.InitPlayers()
     game_manager.InitRoadblocks()

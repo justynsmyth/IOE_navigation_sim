@@ -3,7 +3,9 @@ import pygame
 import networkx as nx
 import math
 import uuid
+from datetime import datetime
 from roadblock import Roadblock
+from ReportManager import ReportManager
 
 # Constants
 NODE_SIZE = 12
@@ -13,13 +15,14 @@ EDGE_DEFAULT_COLOR = (0, 0, 0)
 PADDING = 20  # Padding for the map area
 
 PLAYER_IMAGE_DEFAULT_PATH = 'src/imgs/navigation_red.png'
+PLAYER_IMAGE_FAILED_PATH = 'src/imgs/navigation_gray.png'
 PLAYER_IMAGE_DEVIATE_PATH = 'src/imgs/navigation_deviates.png'
 PLAYER_IMAGE_DONE_PATH = 'src/imgs/navigation_green.png'
 ROADBLOCK_REAL_IMAGE_PATH = 'src/imgs/roadblock_base.png'
 ROADBLOCK_FAKE_IMAGE_PATH = 'src/imgs/roadblock_fake_reported.png'
 ROADBLOCK_FAKE_SELECTED_PLAYER_IMAGE_PATH = 'src/imgs/roadblock_fake_reported_following.png'
 ROADBLOCK_REPORTED_IMAGE_PATH = 'src/imgs/roadblock_reported.png'
-ROADBLOCK_IMAGE_SIZE = 50
+ROADBLOCK_IMAGE_SIZE = 35
 PLAYER_IMAGE_SIZE = 35
 
 def congestion_color(congestion):
@@ -30,36 +33,51 @@ def congestion_color(congestion):
     congestion = 0.5 -> orange
     congestion = 0.25 -> red (high congestion)
     """
-    # Ensure valid range (0.1 to 1.0)
     congestion = max(0.1, min(congestion, 1.0))
 
     if congestion >= 0.75:
-        # Interpolate between black (0,0,0) and yellow (255,255,0)
-        ratio = (1.0 - congestion) * 4
-        r = int(255 * ratio)
-        g = int(255 * ratio)
-        return (r, g, 0)
+        # Interpolate between Black (0,0,0) and Yellow (255,255,0)
+        t = (congestion - 0.75) / (1.0 - 0.75)
+        r = int(255 * (1 - t))  # from 255 (yellow) to 0 (black)
+        g = int(255 * (1 - t))  # from 255 (yellow) to 0 (black)
+        b = 0
+        return (r, g, b)
+
     elif congestion >= 0.5:
-        # Interpolate between yellow (255,255,0) and orange (255,165,0)
-        ratio = (0.75 - congestion) * 4
-        g = int(255 - 90 * ratio)
-        return (255, max(0, g), 0)
+        # Interpolate between Yellow (255,255,0) and Orange (255,165,0)
+        t = (congestion - 0.5) / (0.75 - 0.5)
+        r = 255
+        g = int(165 + (255 - 165) * t)  # from 165 to 255
+        b = 0
+        return (r, g, b)
+
+    elif congestion >= 0.25:
+        # Interpolate between Orange (255,165,0) and Red (255,0,0)
+        t = (congestion - 0.25) / (0.5 - 0.25)
+        r = 255
+        g = int(0 + (165 - 0) * (1 - t))  # from 165 to 0
+        b = 0
+        return (r, g, b)
+
     else:
-        # Interpolate between orange (255,165,0) and red (255,0,0)
-        ratio = (0.5 - congestion) * 4
-        g = int(165 * (1 - ratio))
-        return (255, max(0, g), 0)
+        # Below 0.25 -> just red
+        return (255, 0, 0)
+
 
 class GraphVisualizer:
-    def __init__(self, file_path):
+    def __init__(self, file_path, RM : ReportManager):
         self.G = None
         self.pos = None
         self.load_graph(file_path)
         self.font = pygame.font.SysFont('Tahoma', 14, bold=True)
+        self.none_font = pygame.font.Font(None, 24)
         self.roadblocks = []
         self.reported_roadblocks = set()
         self.player_rects = []
         self.num_players_on_edge = {}
+        self.roadblock_map = {}
+        self.fake_roadblock_map = {}
+        self.RM = RM
 
         self.images = {
             'roadblock_real': pygame.image.load(ROADBLOCK_REAL_IMAGE_PATH).convert_alpha(),
@@ -69,6 +87,7 @@ class GraphVisualizer:
             'p_default': pygame.image.load(PLAYER_IMAGE_DEFAULT_PATH).convert_alpha(),
             'p_done': pygame.image.load(PLAYER_IMAGE_DONE_PATH).convert_alpha(),
             'p_deviate': pygame.image.load(PLAYER_IMAGE_DEVIATE_PATH).convert_alpha(),
+            'p_failed': pygame.image.load(PLAYER_IMAGE_FAILED_PATH).convert_alpha()
         }
 
         self.images['roadblock_real'] = pygame.transform.scale(self.images['roadblock_real'], (ROADBLOCK_IMAGE_SIZE, ROADBLOCK_IMAGE_SIZE))
@@ -78,8 +97,11 @@ class GraphVisualizer:
         self.images['p_default'] = pygame.transform.scale(self.images['p_default'], (PLAYER_IMAGE_SIZE, PLAYER_IMAGE_SIZE))
         self.images['p_done'] = pygame.transform.scale(self.images['p_done'], (PLAYER_IMAGE_SIZE, PLAYER_IMAGE_SIZE))
         self.images['p_deviate'] = pygame.transform.scale(self.images['p_deviate'], (PLAYER_IMAGE_SIZE, PLAYER_IMAGE_SIZE))
+        self.images['p_failed'] = pygame.transform.scale(self.images['p_failed'], (PLAYER_IMAGE_SIZE, PLAYER_IMAGE_SIZE))
 
-        for key in ['p_default', 'p_done', 'p_deviate']:
+
+
+        for key in ['p_default', 'p_done', 'p_deviate', 'p_failed']:
             transparency = pygame.Surface(self.images[key].get_size(), pygame.SRCALPHA)
             transparency.fill((255, 255, 255, 200))  # 200 out of 255 for some transparency
             self.images[key].blit(transparency, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
@@ -148,24 +170,33 @@ class GraphVisualizer:
     def InitRoadblockMap(self, mp):
         """ Called Once during setup. Maps pair of nodes to bool value if exists"""
         self.roadblock_map = mp
+        self.fake_roadblock_map = {}
     
     def InitRoadblocks(self, roadblock: list):
         self.roadblocks = roadblock # creates reference to roadblocks list
         self.reported_roadblocks = set()
 
-    def HasRoadblock(self, node_a, node_b) -> tuple[Roadblock | None, bool]:
-        """Check if there is a roadblock between two nodes (bidirectional)."""
-        roadblock = self.roadblock_map.get((node_a, node_b)) or self.roadblock_map.get((node_b, node_a))
-        return (roadblock, roadblock is not None,)
+    def HasRoadblock(self, node_a, node_b, mp=None) -> tuple[Roadblock | None, bool]:
+        """Check if there is a roadblock between two nodes (bidirectional) inside of provided map"""
+        if mp is None:
+            mp = self.roadblock_map
+        roadblock = mp.get((node_a, node_b)) or mp.get((node_b, node_a))
+        return (roadblock, roadblock is not None)
 
-    def ReportRoadblock(self, node_a, node_b):
+    def ReportRoadblock(self, id: int, node_a, node_b):
         """ Called when a player or AI requests report a roadblock to others"""
-        # if roadblock is real, change the roadblock to reported
-        roadblock, exists = self.HasRoadblock(node_a, node_b)
-        if exists:
-            roadblock.reported = True
-        else:
-            self.roadblocks.append(Roadblock(str(uuid.uuid4()), node_a, node_b, self, False))
+        roadblock, exists = self.HasRoadblock(node_a, node_b, self.roadblock_map)
+
+        if not exists:
+            roadblock, exists = self.HasRoadblock(node_a, node_b, self.fake_roadblock_map)
+            if not exists:
+                roadblock = Roadblock(node_a, node_b, self, False)
+                self.fake_roadblock_map[(node_a, node_b)] = roadblock
+                self.roadblocks.append(roadblock)
+
+        roadblock.reported = True
+        roadblock.times_reported += 1
+        self.RM.add_to_report_history(id, roadblock.id, datetime.now().strftime('%H:%M:%S.%f')[:-3], roadblock.real, node_a, node_b)
         self.reported_roadblocks.add((node_a, node_b))
         
     def EnableColorCongestion(self, enable):
@@ -174,12 +205,15 @@ class GraphVisualizer:
 
     def InitCongestionMap(self, mp):
         """ Called Once during setup. Maps pair of nodes to bool value if exists"""
+        self.congestion_map = {}
         self.congestion_map = mp
 
     def InitCongestionWeightMap(self, mp):
+        self.congestion_weights = {}
         self.congestion_weights = mp
 
     def InitPlayerCongestionMap(self, mp):
+        self.player_congestion = {}
         self.player_congestion = mp
     
     def GetCongestion(self, node_a, node_b) -> float:
@@ -191,13 +225,16 @@ class GraphVisualizer:
                 return road_congestion_factor
             # get the number of players on node_a, node_b edge
             num_players = self.num_players_on_edge.get((node_a, node_b), self.num_players_on_edge.get((node_b, node_a), 0))
-            return self.player_congestion.get(num_players, road_congestion_factor)
+            # if there is no value, return road_congestion_factor
+            # if there is a value, multiply with the road_congestion_factor
+            return self.player_congestion.get(num_players, 1.0) * road_congestion_factor
+            
         return 1.0
     
     def ChangePlayerEdgeLocation(self, edge = None , prev_edge = None):
         # Remove the player from the previous edge
         if prev_edge is not None:
-            prev_node_a , prev_node_b = prev_edge
+            prev_node_a, prev_node_b = prev_edge
             prev_edge_a_b = (prev_node_a, prev_node_b)
             prev_edge_b_a = (prev_node_b, prev_node_a)
             if self.num_players_on_edge.get(prev_edge_a_b, 0) > 0:
@@ -283,6 +320,8 @@ class GraphVisualizer:
                 
                 if hasattr(player, 'finished') and player.finished:
                     player_image = self.images['p_done']
+                elif hasattr(player, 'failed') and player.failed:
+                    player_image = self.images['p_failed']
                 elif player.deviates:
                     player_image = self.images['p_deviate']
                 else:
@@ -358,3 +397,9 @@ class GraphVisualizer:
 
             roadblock_rect = roadblock_img.get_rect(center=(x, y))
             screen.blit(roadblock_img, roadblock_rect)
+
+            # Display times_reported if it's greater than 1
+            if roadblock.times_reported > 1:
+                text_surface = self.none_font.render(str(roadblock.times_reported), True, (255, 255, 255))  # White color
+                text_rect = text_surface.get_rect(center=(x + 8, y + 8))  # Adjust the position as needed
+                screen.blit(text_surface, text_rect)

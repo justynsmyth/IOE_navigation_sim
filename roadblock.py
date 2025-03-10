@@ -1,19 +1,20 @@
-import os
 import json
-import uuid
 
 class Roadblock:
-    def __init__(self, uuid, node_a, node_b, graph_visualizer, real = False):
-        self.uuid = uuid
+    _id_ctr = 0
+    def __init__(self, node_a, node_b, graph_visualizer, real = False):
+        self.id = Roadblock._id_ctr
+        Roadblock._id_ctr += 1
         self.graph_visualizer = graph_visualizer
         self.node_a = node_a
         self.node_b = node_b
         self.pos = self.graph_visualizer.get_connection_midpoint(node_a, node_b)
-        self.reported = False
-        self.real = real
+        self.reported = False # whether this roadblock has been reported by a player
+        self.real = real # whether or not this roadblock is real
+        self.times_reported = 0 # number of people that reported on this roadblock
 
     def __repr__(self):
-        return (f"Roadblock(UUID: {self.uuid}, "
+        return (f"Roadblock(UUID: {self.id}, "
                 f"node_a: {self.node_a}, "
                 f"node_b: {self.node_b}, "
                 f"Pos: {self.pos})")
@@ -37,8 +38,7 @@ def LoadRoadblockInfo(json_path, GV) -> list[Roadblock]:
             if not GV.is_valid_connection(a,b):
                 print(f"Invalid connection: {a} -> {b}")
                 exit(1)
-            roadblock_uuid = str(uuid.uuid4())  # Generate a unique UUID
-            roadblock = Roadblock(roadblock_uuid, a, b, GV, True)
+            roadblock = Roadblock(a, b, GV, True)
             roadblocks.append(roadblock)
             roadblock_map[(a, b)] = roadblock
     GV.InitRoadblockMap(roadblock_map)

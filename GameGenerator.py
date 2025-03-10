@@ -1,5 +1,4 @@
 import os
-import random
 import csv
 import numpy as np
 
@@ -11,6 +10,7 @@ class GameGenerator:
         self.seed = settings['Seed']
         self.rng = np.random.default_rng(self.seed)
         self.num_players = len(start_end_json["start_end_indices"])
+
 
         # Player Probability Setup
         self.players_speeds = self.generate_players_speeds(self.num_players)
@@ -35,7 +35,7 @@ class GameGenerator:
                 "follow_navigation_prob": self.players_follow_navigation_probabilities[i],
                 "report_roadblock_prob": self.players_report_if_roadblock_probabilities[i],
                 "false_report_no_roadblock_prob": self.players_report_if_no_roadblock_probabilities[i],
-                "NavHistory": []
+                "NavHistory": [],
             }
             self.Players.append(player_data)
         self.ResetAllPlayerIndices()
@@ -114,6 +114,7 @@ class GameGenerator:
             "updateRoute": list(route)
         }
         self.Players[id]["NavHistory"].append(entry)
+
 
     def SaveSetupCsv(self, time: str):
         directory = os.path.join('logs', time)
@@ -237,6 +238,7 @@ class GameGenerator:
                                 player['reports_roadblock_no_roadblock'][j]
                                 ])
     
+
     def SaveNavHistory(self, time):
         directory = os.path.join('logs', time)
         os.makedirs(directory, exist_ok=True)
@@ -258,8 +260,6 @@ class GameGenerator:
                                 entry['updateRoute']
                                 ])    
 
-    # def SaveReportHistory(self, time):
-                    
 
     def GetNextFollowNavigation(self, id) -> bool:
         # "reports_roadblock_no_roadblock": self.generate_array_by_probability(self.players_report_if_no_roadblock_probabilities[i]),
