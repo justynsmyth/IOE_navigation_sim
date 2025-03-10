@@ -1,5 +1,5 @@
-import random
 import json
+import pygame
 from Djikstra import Djikstra
 import math
 import csv
@@ -23,7 +23,6 @@ class Player:
 
         if logger is None:
             logger = setup_logger(log_file_path)
-            print("RUNNING")
         
         self.id = player_id
         self.start = start_node
@@ -38,6 +37,7 @@ class Player:
 
         self.finished = False # Indicate whether a player has finished the game
         self.failed = False # Indicates when a player cannot progress the game and is in a failed state
+        self.moveTimeout = 0 # Duration left of a player timeout (Used for ReportTimePenalty)
 
         self.speed = speed
 
@@ -48,7 +48,7 @@ class Player:
         self.RoadblockOnPrevRoute = False
         self.CheckedRoadblockOnCurrentRoute = False
         self.ReportIfRoadblock = False
-        self.check_distance = 2
+        self.check_distance = 15 # higher means the player must travel a longer distance before checking for roadblock
         self.traveled_distance = 0
         self.known_roadblocks = set() # personal list of roadblocks known to the player (does not have to be reported)
         self.false_roadblocks = set() # personal list of roadblocks that were falsely reported by player
@@ -58,12 +58,11 @@ class Player:
         logger.info(f"player {self.id} started at {start_node}")
         self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Initial", self.curr_node_id, self.path)
         self.dest_node = self.path[1]
-
         self.curr_edge = (self.curr_node_id, self.dest_node)
         self.GV.ChangePlayerEdgeLocation(self.curr_edge, None)
 
-        self.is_initial = True
 
+        self.is_initial = True
         self.deviates = False
         
 
@@ -137,7 +136,7 @@ class Player:
         """Creates new log position"""
         self.directory_path = os.path.join('logs', self.directory_time)
         os.makedirs(self.directory_path, exist_ok=True)
-        self.position_csv = os.path.join(self.directory_path, 'position.csv') 
+        self.position_csv = os.path.join(self.directory_path, 'Position.csv') 
         with open(self.position_csv, mode='w', newline='') as file:
             w = csv.writer(file)
             w.writerow(['Player', 'Time', 'posX', 'posY'])
@@ -210,13 +209,15 @@ class Player:
             next_path = (self.curr_node_id, self.path[1]) if (len(self.path) > 1) else None
             self.path = Djikstra(self.curr_node_id, self.end, self.GV, self.known_roadblocks, {next_path})
 
-    def CheckForFailure(self) -> bool:
-        '''Checks if the player is unable to move due to false roadblocks or no viable path to the destination:
-            The navigator, using its knowledge of all reported roadblocks, determined that there is no viable path to the destination.
-            The player can only proceed if they decide to deviate from the navigator's instructions:
+    def CheckForFailure(self) -> bool:        
+        '''
+            Checks if the player is unable to move due to false roadblocks or no viable path to the destination:
+            If the navigator, using its knowledge of all reported roadblocks, determines that there is no viable path to the destination,
+            the player can only proceed if they deviate from the navigator's instructions.
+
             If the player strictly follows the navigator and the navigator indicates no viable path, the player is in a failed state.
-            If the player chooses to ignore the navigator when it reports no viable path, the player can continue if they know an alternative route (e.g., if they are aware of fake roadblocks).
-            If the player decides to deviate from the navigator even when a valid path exists, and this deviation results in the player being unable to move, the player is in a failed state.
+            If the player chooses to ignore the navigator when it reports no viable path, the player can continue if they know an alternative route (e.g., if they are aware of fake roadblocks they reported themselves).
+            If the player decides to deviate from the navigator even when a valid path exists, and this deviation results in the player being unable to move, the player enters a failed state.
         '''
         if (len(self.path) == 1):
             if self.path[0] != self.curr_node_id:
@@ -243,13 +244,32 @@ class Player:
             logger.info(f"Player {self.id} decides to not report roadblock. Detouring")
             self.path = Djikstra(self.curr_node_id, self.end, self.GV, self.known_roadblocks)
             self.deviates = True
-            self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Detoured from Non-Reported Roadblock", self.curr_node_id, self.path.copy()) 
-            
+            self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Detoured from Non-Reported Roadblock", self.curr_node_id, self.path.copy())
+        
+    def CheckForReportTimePenalty(self, id):
+        if self.Gen.ReportTimePenalties[id] > 0:
+            logger.info(f"Player {id} experiencing a time penalty of {self.Gen.ReportTimePenalties[id]} seconds")
+            self.moveTimeout = pygame.time.get_ticks() + (self.Gen.ReportTimePenalties[id] * 1000) # convert to ms
+
+    def isPlayerTimedOut(self) -> bool:
+        '''Check if the player currently is not allowed to move due to a ReportTimePenalty'''
+        if self.moveTimeout != 0:
+            if pygame.time.get_ticks() < self.moveTimeout:
+                return True
+            else:
+                logger.info(f"Player {self.id} time penalty has ended.")
+                self.moveTimeout = 0 
+                return False
+        return False
         
     def update(self):
         """Update the position and direction over time. Checks for Roadblock."""
         # Has player reached a dest_node by their .t value exceededing the normalized progress (1 is max)
         # If initial, still need to check if the player will deviate or not
+        
+        if self.isPlayerTimedOut():
+            return
+
         if self.t >= 1:
             if self.dest_node != self.curr_node_id:
                 self.path.popleft() # delete prev node from current path
@@ -286,7 +306,7 @@ class Player:
         congestion_value = self.GV.GetCongestion(self.curr_node_id, self.dest_node)  # Range: 0.1 - 1.0
         adjusted_speed = self.speed * congestion_value  # Reduce speed based on congestion
 
-        # Calculate delta_t based on desired speed
+        # Calculate delta_t based on desired speed (time increment that determines how much progress was made in current tick)
         if distance > 0:
             delta_t = min(adjusted_speed / max(distance, 1e-6), 1)
         else:
@@ -312,6 +332,7 @@ class Player:
                 if self.ReportIfRoadblock:
                     self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node)
                     logger.info(f"Player {self.id} reported roadblock between {self.curr_node_id} and {self.dest_node}")
+                    self.CheckForReportTimePenalty(self.id)
 
                 self.dest_node = self.curr_node_id  # Set destination to current node
                 self.roadblock_position = self.get_pos()  # Store the roadblock position
@@ -325,6 +346,7 @@ class Player:
                     self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node)
                     logger.info(f"Player {self.id} false reported a roadblock between {self.curr_node_id} and {self.dest_node}")
                     self.false_roadblocks.add((self.curr_node_id, self.dest_node))
+                    self.CheckForReportTimePenalty(self.id)
                 self.CheckedRoadblockOnCurrentRoute = True
         else:
             self.set_direction(self.calculate_direction(orig_pos, dest_pos))

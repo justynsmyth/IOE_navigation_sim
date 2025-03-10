@@ -1,6 +1,8 @@
 import os
 import csv
 import numpy as np
+from congestion import Congestion
+from GraphVisualizer import GraphVisualizer
 
 class GameGenerator:
     def __init__(self, settings, start_end_json):
@@ -10,7 +12,6 @@ class GameGenerator:
         self.seed = settings['Seed']
         self.rng = np.random.default_rng(self.seed)
         self.num_players = len(start_end_json["start_end_indices"])
-
 
         # Player Probability Setup
         self.players_speeds = self.generate_players_speeds(self.num_players)
@@ -42,17 +43,20 @@ class GameGenerator:
         
         # AI Experimenter Setup
         self.TimeLagActivated = settings['TimeLagActivated']
-        self.TimeLagMin = settings['TimeLagMin']
-        self.TimeLagMax = settings['TimeLagMax']
+        self.TimeLag = settings['TimeLag']
 
-        if settings['TimeLagActivated']:
-            self.ArrTimeLagValues = self.generate_timelag_values(settings['TimeLagMin'], settings['TimeLagMax'])
-        else:
-            self.ArrTimeLagValues = [0] * self.n
+        # if settings['TimeLagActivated']:
+        #     self.ArrTimeLagValues = self.generate_timelag_values(settings['TimeLagMin'], settings['TimeLagMax'])
+        # else:
+        #     self.ArrTimeLagValues = [0] * self.n
 
         # Report Time Setup
         self.ReportTimePenaltyActivated = settings['ReportTimePenaltyActivated']
-        self.ReportTimePenalty = settings['ReportTimePenalty']
+        if settings['ReportTimePenaltyActivated']:
+            self.ReportTimePenalties = self.generate_players_reporttime_penalties(self.num_players)
+        else:
+            self.ReportTimePenalties = [0] * self.n
+
         self.IsAIControlled = settings['IsAIControlled']
 
         # AI Experimenter boolean array setup
@@ -68,10 +72,8 @@ class GameGenerator:
             'ProbWrongReportIfNoRoadblock')
         self.ArrIsWrongAdjNoRoadblock = self.generate_bool_array(
             'ProbWrongReportIfNoRoadblock')
-        
         self.ArrIsCorrectRandomReport = self.generate_bool_array(
             'ProbCorrectRandomReport')
-
         self.start_end_json = start_end_json
 
     def generate_timelag_values(self, min, max):
@@ -97,6 +99,14 @@ class GameGenerator:
         speeds = self.rng.normal(mean_speed, std_dev_speed, num_players)
         speeds = np.clip(speeds, 0, None)
         return speeds.tolist()
+    
+    def generate_players_reporttime_penalties(self, num_players):
+        mean = self.settings['ReportTimePenalty']['mean']
+        std_dev = self.settings['ReportTimePenalty']['std_dev']
+        times = self.rng.normal(mean, std_dev, num_players)
+        times = np.clip(times, 0, None)
+        return times.tolist()
+
     
     def generate_probabilities_array(self, setting_key, num_players):
         mean = self.settings[setting_key]['mean']
@@ -129,7 +139,7 @@ class GameGenerator:
                     '[4] Participation Amount',
                     '[5] Min. Report Distance',
                     '[5] Max. Report Distance',
-                    '[6] Prob. Correct Random Report]',])
+                    '[6] Prob. Correct Random Report',])
             w.writerow([self.settings['IsAIControlled'],
                     self.settings['ProbOfNextNode'],
                     self.settings['ProbCorrectReportIfRoadblock'],
@@ -143,18 +153,14 @@ class GameGenerator:
             w.writerow(['Seed',
                         'RNG Event Length',
                         'Time Lag Activated',
-                        'Time Lag Min.',
-                        'Time Lag Max.',
+                        'Time Lag',
                         'Report Time Penalty Activated',
-                        'Time Penalty'
                         ])
             w.writerow([self.seed,
                         self.n,
                         self.TimeLagActivated,
-                        self.TimeLagMin,
-                        self.TimeLagMax,
+                        self.TimeLag,
                         self.ReportTimePenaltyActivated,
-                        self.ReportTimePenalty
                         ])
             w.writerow([])
             w.writerow(['Player Speed Mean',
@@ -164,7 +170,9 @@ class GameGenerator:
                     'ProbPlayerReportIfRoadblock Mean',
                     'ProbPlayerReportIfRoadblock Std. Dev.',
                     'ProbPlayerReportIfNoRoadblock Mean',
-                    'ProbPlayerReportIfNoRoadblock Std. Dev.'])
+                    'ProbPlayerReportIfNoRoadblock Std. Dev.',
+                    'Player Report Time Penalty Mean',
+                    'Player Report Time Penalty Std. Dev.'])
             w.writerow([self.settings['PlayerSpeed']['mean'],
                     self.settings['PlayerSpeed']['std_dev'],
                     self.settings['ProbPlayerFollowsNavigation']['mean'],
@@ -172,7 +180,9 @@ class GameGenerator:
                     self.settings['ProbPlayerReportIfRoadblock']['mean'],
                     self.settings['ProbPlayerReportIfRoadblock']['std_dev'],
                     self.settings['ProbPlayerReportIfNoRoadblock']['mean'],
-                    self.settings['ProbPlayerReportIfNoRoadblock']['std_dev']])
+                    self.settings['ProbPlayerReportIfNoRoadblock']['std_dev'],
+                    self.settings['ReportTimePenalty']['mean'],
+                    self.settings['ReportTimePenalty']['std_dev']])
 
     def SaveDecisionCsv(self, time):
         directory = os.path.join('logs', time)
@@ -187,7 +197,6 @@ class GameGenerator:
                         '[3-2] Is Report Wrong If Adjacent and No Roadblock',
                         '[4] Random Time Sequence',
                         '[6] Is Random Report Correct',
-                        '[7] Time Lag Values',
                         ])
 
 
@@ -199,7 +208,6 @@ class GameGenerator:
                             self.ArrIsWrongAdjNoRoadblock[i],
                             self.random_time_sequences[i],
                             self.ArrIsCorrectRandomReport[i],
-                            self.ArrTimeLagValues[i]
                             ])
 
 
@@ -214,6 +222,7 @@ class GameGenerator:
                         'Player Follows Navigation',
                         'ProbReportIfRoadblock',
                         'ProbReportIfNoRoadblock',
+                        'Player Report Time Penalty',
                         ])
 
             for i, player in enumerate(self.Players):
@@ -221,7 +230,9 @@ class GameGenerator:
                             self.players_speeds[i],
                             player['follow_navigation_prob'],
                             player['report_roadblock_prob'],
-                            player['false_report_no_roadblock_prob']])
+                            player['false_report_no_roadblock_prob'],
+                            self.ReportTimePenalties[i],
+                        ])
             w.writerow([])
             w.writerow(['PlayerID',
                         ' ',
@@ -259,6 +270,30 @@ class GameGenerator:
                                 entry['current_waypoint'],
                                 entry['updateRoute']
                                 ])    
+    
+    def SaveCongestion(self, time, congestion: list[Congestion], GV: GraphVisualizer):
+        'Given a list, save the Congestion to a CSV file'
+        directory = os.path.join('logs', time)
+        os.makedirs(directory, exist_ok=True)
+        file_path = os.path.join(directory, 'Congestion.csv')
+        with open(file_path, mode='w', newline='') as file:
+            w = csv.writer(file)
+            w.writerow(['Color Enabled?', GV.enable_color_congestion])
+            w.writerow(['Congestion'])
+            w.writerow(['node_a', 'node_b', 'value/weight'])
+            for c in congestion:
+                w.writerow([c.node_a, c.node_b, c.congestion_value])
+            # Write Congestion Weights
+            w.writerow(['Congestion Weights (Exclusive,Inclusive]'])
+            w.writerow(['lower', 'upper', 'distance multiplier'])
+            for road_pair, weight in GV.congestion_weights.items():
+                w.writerow([road_pair[0], road_pair[1], weight])
+            w.writerow([])
+            w.writerow(['Player Congestion Weights'])
+            w.writerow(['value', 'value/weight'])
+            print(GV.player_congestion)
+            for num, weight in GV.player_congestion.items():
+                w.writerow([num, weight])
 
 
     def GetNextFollowNavigation(self, id) -> bool:

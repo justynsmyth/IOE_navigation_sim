@@ -29,16 +29,20 @@ def process_settings(settings):
 
     # If TimeLag is Not Active, Set Values to None
     if not settings.get("TimeLagActivated", False):
-        settings["TimeLagMin"] = None
-        settings["TimeLagMax"] = None
+        settings["TimeLagActivated"] = False
+        settings["TimeLag"] = 0
     else:
+        settings["TimeLagActivated"] = True
         isValidTimeLagValues(settings)
 
     # If ReportTimePenalty is Not Active, Set Values to None
     if not settings.get("ReportTimePenaltyActivated", False):
-        settings["ReportTimePenalty"] = None
+        settings["ReportTimePenaltyActivated"] = False
+        settings["ReportTimePenalty"]['mean'] = 0
+        settings["ReportTimePenalty"]['std_dev'] = 0
     else:
-        isValidTimePenaltyValues(settings)
+        settings["ReportTimePenaltyActivated"] = True
+        isValidReportTimePenaltyValues(settings)
 
     if settings.get("IsAIControlled", True):
         ValidateAISettings(settings)
@@ -50,31 +54,28 @@ def process_settings(settings):
     return processed_settings
 
 
-def isValidTimeLagValues(settings) -> bool:
+def isValidReportTimePenaltyValues(settings) -> bool:
     try:
-        ReportTimePenalty = int(settings["ReportTimePenalty"])
-        if ReportTimePenalty < 0:
+        mean = float(settings["ReportTimePenalty"]['mean'])
+        std_dev = float(settings["ReportTimePenalty"]['std_dev'])
+        if mean < 0:
             raise ValueError(
-                f"ReportTimePenalty: {ReportTimePenalty} must be a non-negative integer.")
+                f"Mean: {mean} must be a non-negative number.")
+        if std_dev < 0:
+            raise ValueError(
+                f"Std_dev {std_dev} must be a non-negative number"
+            )
     except ValueError as e:
         print(e)
         exit(1)
 
 
-def isValidTimePenaltyValues(settings) -> bool:
+def isValidTimeLagValues(settings) -> bool:
     try:
-        time_lag_min = int(settings["TimeLagMin"])
-        time_lag_max = int(settings["TimeLagMax"])
-        if time_lag_min < 0:
+        time_lag = int(settings["TimeLag"])
+        if time_lag < 0:
             raise ValueError(
-                f"TimeLagMin: {time_lag_min} must be a non-negative integer.")
-        if time_lag_max < 0:
-            raise ValueError(
-                f"TimeLagMax: {time_lag_max} must be a non-negative integer.")
-        if time_lag_max < time_lag_min:
-            raise ValueError(
-                f"Invalid TimeLag values: {time_lag_max} should be >= {time_lag_min}."
-            )
+                f"TimeLagMin: {time_lag} must be a non-negative integer.")
     except ValueError as e:
         print(e)
         exit(1)

@@ -45,8 +45,16 @@ def Djikstra(start_node: int, end_node: int, GV: GraphVisualizer, player_known_r
                     continue
 
             weight = GV.G[current_node][neighbor]['weight']
+            
+            # If there are players or a congestion weight on an edge, get the multipler
+            congestion_factor = GV.GetCongestion(current_node, neighbor)
+            weight_mult = GV.GetCongestionMultiplier(congestion_factor)
 
-            new_distance = current_distance + weight
+            # Adjust the weight by multiplying it with the distance multiplier
+            adjusted_weight = weight * weight_mult
+
+            # Calculate the new tentative distance
+            new_distance = current_distance + adjusted_weight
 
             if new_distance < distances[neighbor]:
                 distances[neighbor] = new_distance
@@ -55,8 +63,9 @@ def Djikstra(start_node: int, end_node: int, GV: GraphVisualizer, player_known_r
 
     path = deque()
     current_node = end_node
+    # reverses from end to start and stores inside path deque
     while current_node is not None:
         path.appendleft(current_node)  # Add to the left of the deque
-        current_node = previous_nodes[current_node]
+        current_node = previous_nodes[current_node] # follow the previous_nodes chain back to the beginning
 
     return path

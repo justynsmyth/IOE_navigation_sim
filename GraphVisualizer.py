@@ -77,6 +77,10 @@ class GraphVisualizer:
         self.num_players_on_edge = {}
         self.roadblock_map = {}
         self.fake_roadblock_map = {}
+        
+        self.congestion_weights = {}
+
+        self.enable_color_congestion = False
         self.RM = RM
 
         self.images = {
@@ -226,7 +230,7 @@ class GraphVisualizer:
             # get the number of players on node_a, node_b edge
             num_players = self.num_players_on_edge.get((node_a, node_b), self.num_players_on_edge.get((node_b, node_a), 0))
             # if there is no value, return road_congestion_factor
-            # if there is a value, multiply with the road_congestion_factor
+            # if there is a value, multiply with the road_congestion_factor       
             return self.player_congestion.get(num_players, 1.0) * road_congestion_factor
             
         return 1.0
@@ -257,12 +261,12 @@ class GraphVisualizer:
                 self.num_players_on_edge[edge_a_b] = self.num_players_on_edge.get(edge_a_b, 0) + 1
 
     
-    def GetCongestionMultiplier(self, congestion_factor, congestion_weights):
+    def GetCongestionMultiplier(self, congestion_factor):
         """Given a congestion factor (0-1), return the distance multipler."""
-        for (low, high), multiplier in congestion_weights:
+        for (low, high), multiplier in self.congestion_weights.items():
             if low <= congestion_factor < high:
                 return multiplier
-        return None  # Return None if no range matches
+        return 1 # There was no multiplier found
 
 
     def transform_position(self, x, y, scale, offset_x, offset_y, min_x, min_y):

@@ -30,15 +30,19 @@ def LoadCongestionInfo(json_path, GV):
                 print(f"Invalid connection: {a} -> {b}")
                 exit(1)
             congestion_value = min(1, congestion_value) # do not allow anything higher than 1
-            congestion_value = max (0.00001, congestion_value)
+            if congestion_value == 0:
+                print(f"Invalid congestion value: {congestion_value}. Needs to be larger than 0!")
+                exit(1)
+            congestion_value = max(0.00001, congestion_value)
             congestion_uuid = str(uuid.uuid4())  # Generate a unique UUID
             congestions.append(Congestion(congestion_uuid, a, b, congestion_value, GV))
             congestion_map[(a,b)] = congestion_value
         for (a, b), congestion_weight in data["congestion_weights"]:
             if (a > b) or (a < 0):
-                print(f"Invalid connection: {a} -> {b}")
+                print(f"Invalid connection weight: (a, b].")
                 exit(1)
             congestion_weights_map[(a,b)] = congestion_weight
+        # player congestion is [inclusive, exclusive)
         for (a, b), player_congestion in data["player_congestion"]:
             if (a > b) or (a <= 0):
                 print(f"Invalid connection: {a} -> {b}")
@@ -47,6 +51,6 @@ def LoadCongestionInfo(json_path, GV):
                 player_congestion_map[i] = player_congestion
         GV.EnableColorCongestion(data["color_enabled"])
     GV.InitCongestionMap(congestion_map)
-    GV.InitCongestionWeightMap(congestion_weight)
+    GV.InitCongestionWeightMap(congestion_weights_map)
     GV.InitPlayerCongestionMap(player_congestion_map)
     return congestions

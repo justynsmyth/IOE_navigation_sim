@@ -102,9 +102,6 @@ class GameManager:
 
     def InitGenerator(self):
         self.Generator = SetupGenerator()
-        self.Generator.SaveDecisionCsv(self.time_started)
-        self.Generator.SaveSetupCsv(self.time_started)
-        self.Generator.SavePlayerDecisionCsv(self.time_started)
 
     def ResetGenerator(self):
         self.Generator = None 
@@ -211,7 +208,7 @@ class GameManager:
             self.can_scroll = True
 
         content_surface = pygame.Surface((outer_width, outer_height))
-        content_surface.fill(GRAY)  # Clear the surface with the background color
+        content_surface.fill(GRAY) # Clear the surface with the background color
 
         # Render the "Report History" title
         title_text = TITLE_FONT.render("Report History", True, BLACK)
@@ -302,6 +299,11 @@ class GameManager:
         screen.blit(timer_text, (20, 120))
 
     def save_csv_files(self):
+        self.Generator.SaveDecisionCsv(self.time_started)
+        self.Generator.SaveSetupCsv(self.time_started)
+        self.Generator.SaveCongestion(self.time_started, self.congestions, self.GV)
+        self.Generator.SavePlayerDecisionCsv(self.time_started)
+
         self.Generator.SaveNavHistory(self.time_started)
         self.RM.SaveReportHistory(self.time_started, self.GV.roadblock_map, self.GV.fake_roadblock_map)
 
@@ -369,10 +371,11 @@ def SetupGenerator() -> GameGenerator:
 
 def main():
     game_manager = GameManager()
+    game_manager.InitCongestions()
     game_manager.InitGenerator()
     game_manager.InitPlayers()
     game_manager.InitRoadblocks()
-    game_manager.InitCongestions()
+    game_manager.save_csv_files()
 
     # Profile the main loop
     profiler = cProfile.Profile()
