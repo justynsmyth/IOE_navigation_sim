@@ -237,10 +237,11 @@ class Player:
         # Will try and avoid any paths reported already
         if self.ReportIfRoadblock:
             logger.info(f"System finding new route for player {self.id} due to roadblock report")
-            # system needs to know about known_roadblocks in case there is a timelag delay. 
+            # system needs to know about curr_edge in case there is a timelag delay. 
             # For example, if a player reports, the system locally needs to find a new path that avoids the roadblock,
-            #   but then the system does not update GV.reported_roadblocks until the timelag finishes
-            self.path = Djikstra(self.curr_node_id, self.end, self.GV, self.known_roadblocks, None,True)
+            #   but system does not update GV.reported_roadblocks until AFTER timelag finishes. self.curr_edge is a work_around for this
+            print("AVOIDING: ", self.curr_edge)
+            self.path = Djikstra(self.curr_node_id, self.end, self.GV, None, {self.curr_edge}, True)
             self.deviates = False
             logger.info(f"New path: {self.path}")
             self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Detour from Reported Roadblock", self.curr_node_id, self.path.copy()) 
