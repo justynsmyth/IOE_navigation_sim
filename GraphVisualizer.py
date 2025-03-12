@@ -193,6 +193,7 @@ class GraphVisualizer:
         roadblock, exists = self.HasRoadblock(node_a, node_b, self.roadblock_map)
         if timelag is not None:
             await asyncio.sleep(timelag)
+            print(f"TimeLag done at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
         if not exists:
             roadblock, exists = self.HasRoadblock(node_a, node_b, self.fake_roadblock_map)
             if not exists:

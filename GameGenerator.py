@@ -170,7 +170,7 @@ class GameGenerator:
                     'ProbPlayerReportIfNoRoadblock Mean',
                     'ProbPlayerReportIfNoRoadblock Std. Dev.',
                     'Time Lag Mean',
-                    'Time Lag Std. Dev.'
+                    'Time Lag Std. Dev.',
                     'Player Report Time Penalty Mean',
                     'Player Report Time Penalty Std. Dev.',
                     ])
@@ -200,7 +200,7 @@ class GameGenerator:
                         '[3-2] Is Report Wrong If Adjacent and No Roadblock',
                         '[4] Random Time Sequence',
                         '[6] Is Random Report Correct',
-                        '[7] Time Lag Values'
+                        '[7] Time Lag Values',
                         ])
 
 
