@@ -107,9 +107,9 @@ class Player:
         """Set the current node id of the player."""
         if not self.is_initial:
             if self.curr_node_id == node_id:
-                logger.info(f"player {self.id} has detoured back to {node_id}")
+                logger.info(f"Player {self.id} has detoured back to {node_id}")
             else:
-                logger.info(f"player {self.id} has moved to {node_id}")
+                logger.info(f"Player {self.id} has moved to {node_id}")
         self.curr_node_id = node_id
 
     def log_position(self):
@@ -240,7 +240,6 @@ class Player:
             # system needs to know about curr_edge in case there is a timelag delay. 
             # For example, if a player reports, the system locally needs to find a new path that avoids the roadblock,
             #   but system does not update GV.reported_roadblocks until AFTER timelag finishes. self.curr_edge is a work_around for this
-            print("AVOIDING: ", self.curr_edge)
             self.path = Djikstra(self.curr_node_id, self.end, self.GV, None, {self.curr_edge}, True)
             self.deviates = False
             logger.info(f"New path: {self.path}")
@@ -330,7 +329,7 @@ class Player:
         if self.traveled_distance >= self.check_distance:
             _, exists = self.GV.HasRoadblock(self.curr_node_id, self.dest_node, )
             if exists and not self.RoadblockOnPrevRoute:
-                logger.info(f"Roadblock detected between {self.curr_node_id} and {self.dest_node}. Returning to current node.")
+                logger.info(f"Player {self.id} found roadblock between {self.curr_node_id} and {self.dest_node}. Returning to current node.")
                 # Detour back to current node
                 self.known_roadblocks.add((self.curr_node_id, self.dest_node))
                 self.ReportIfRoadblock = self.Gen.GetNextReportsRoadblockIfRoadblock(self.id)
