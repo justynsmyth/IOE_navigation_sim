@@ -1,18 +1,22 @@
 {
     "n": 1000,
     "Seed": 1,
-    "TimeLagActivated" : false,
-    "TimeLagMin" : null,
-    "TimeLagMax" : null,
-    "ReportTimePenaltyActivated" : false,
-    "ReportTimePenalty" : null,
-    
+    "TimeLagActivated" : true,
+    "TimeLag" : {
+        "mean": 3,
+        "std_dev": 1
+    },
+    "ReportTimePenaltyActivated" : true,
+    "ReportTimePenalty" : {
+        "mean": 1,
+        "std_dev": 0.1
+    },
     "PlayerSpeed": {
         "mean": 50,
         "std_dev": 5
     },
     "ProbPlayerFollowsNavigation": {
-        "mean": 0.6,
+        "mean": 0.65,
         "std_dev": 0.1
     },
     "ProbPlayerReportIfRoadblock": {
@@ -23,7 +27,6 @@
         "mean": 0.3,
         "std_dev": 0.1
     },
-
     "IsAIControlled": false,
     "ProbOfNextNode": 0.5,
     "ProbCorrectReportIfRoadblock": 0.7,

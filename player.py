@@ -8,6 +8,7 @@ import os
 from GameGenerator import GameGenerator
 from GraphVisualizer import GraphVisualizer
 from logger import setup_logger 
+import asyncio
 
 logger = None
 
@@ -64,9 +65,9 @@ class Player:
 
         self.is_initial = True
         self.deviates = False
+
+        self.tasks = set()
         
-
-
     def __repr__(self):
         return (f"Player(ID: {self.id}, "
                 f"Start: {self.start}, "
@@ -200,7 +201,8 @@ class Player:
         follow_nav = self.Gen.GetNextFollowNavigation(self.id)
         if follow_nav:
             self.deviates = False
-            self.path = Djikstra(self.curr_node_id, self.end, self.GV, None, None, True)
+            if not self.RoadblockOnPrevRoute: # do not generate a new path if we already have inside of OnPlayerReturnsFromRoadblock
+                self.path = Djikstra(self.curr_node_id, self.end, self.GV, None, None, True)
         else:
             logger.info(f"Player {self.id} decides to deviate from navigation")
             # If a player is returning to their origin node (due to roadblock)
@@ -235,7 +237,10 @@ class Player:
         # Will try and avoid any paths reported already
         if self.ReportIfRoadblock:
             logger.info(f"System finding new route for player {self.id} due to roadblock report")
-            self.path = Djikstra(self.curr_node_id, self.end, self.GV, None, None,True)
+            # system needs to know about known_roadblocks in case there is a timelag delay. 
+            # For example, if a player reports, the system locally needs to find a new path that avoids the roadblock,
+            #   but then the system does not update GV.reported_roadblocks until the timelag finishes
+            self.path = Djikstra(self.curr_node_id, self.end, self.GV, self.known_roadblocks, None,True)
             self.deviates = False
             logger.info(f"New path: {self.path}")
             self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Detour from Reported Roadblock", self.curr_node_id, self.path.copy()) 
@@ -262,7 +267,7 @@ class Player:
                 return False
         return False
         
-    def update(self):
+    async def update(self):
         """Update the position and direction over time. Checks for Roadblock."""
         # Has player reached a dest_node by their .t value exceededing the normalized progress (1 is max)
         # If initial, still need to check if the player will deviate or not
@@ -327,29 +332,55 @@ class Player:
                 logger.info(f"Roadblock detected between {self.curr_node_id} and {self.dest_node}. Returning to current node.")
                 # Detour back to current node
                 self.known_roadblocks.add((self.curr_node_id, self.dest_node))
-
                 self.ReportIfRoadblock = self.Gen.GetNextReportsRoadblockIfRoadblock(self.id)
                 if self.ReportIfRoadblock:
-                    self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node)
-                    logger.info(f"Player {self.id} reported roadblock between {self.curr_node_id} and {self.dest_node}")
+                    timelag = 0
+                    if self.Gen.settings['TimeLagActivated']:
+                        timelag = self.Gen.GetNextTimeLag(self.id)
+                        task = asyncio.create_task(
+                            self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node, timelag)
+                        )
+                        self.tasks.add(task)
+                        task.add_done_callback(self.tasks.discard)
+                        logger.info(f"Player {self.id} reporting roadblock between {self.curr_node_id} and {self.dest_node} with a time lag of {timelag} seconds")
+                    else:
+                        self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node)
+                        logger.info(f"Player {self.id} reported roadblock between {self.curr_node_id} and {self.dest_node}")
                     self.CheckForReportTimePenalty(self.id)
 
                 self.dest_node = self.curr_node_id  # Set destination to current node
                 self.roadblock_position = self.get_pos()  # Store the roadblock position
                 self.set_direction(self.calculate_direction(self.pos, orig_pos))
-                self.RoadblockOnPrevRoute = True
+                self.RoadblockOnPrevRoute = True # used to make sure the player does not report the same roadblock twice. Updates to false when player reaches a new node 
                 self.CheckedRoadblockOnCurrentRoute = True
                 self.t = 0
             elif not self.CheckedRoadblockOnCurrentRoute:
                 ReportRoadblockIfNoRoadblock = self.Gen.GetNextReportsRoadblockIfNoRoadblock(self.id)
                 if ReportRoadblockIfNoRoadblock:
-                    self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node)
-                    logger.info(f"Player {self.id} false reported a roadblock between {self.curr_node_id} and {self.dest_node}")
+                    timelag = 0
+                    if self.Gen.settings['TimeLagActivated']:
+                        timelag = self.Gen.GetNextTimeLag(self.id)
+                        task = asyncio.create_task(
+                            self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node, timelag)                            
+                        )
+                        self.tasks.add(task)
+                        task.add_done_callback(self.tasks.discard)
+                        logger.info(f"Player {self.id} false reporting roadblock between {self.curr_node_id} and {self.dest_node} with a time lag of {timelag} seconds")
+                    else:  
+                        self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node)
+                        logger.info(f"Player {self.id} false reported a roadblock between {self.curr_node_id} and {self.dest_node}")
                     self.false_roadblocks.add((self.curr_node_id, self.dest_node))
                     self.CheckForReportTimePenalty(self.id)
                 self.CheckedRoadblockOnCurrentRoute = True
         else:
             self.set_direction(self.calculate_direction(orig_pos, dest_pos))
+        
+    async def cancel_all_tasks(self):
+        """Cancel all active tasks."""
+        for task in self.tasks:
+            task.cancel()
+        await asyncio.gather(*self.tasks, return_exceptions=True)  # Wait for cancellation
+        self.tasks.clear()  # Clear the set
 
 def LoadPlayerInfo(json_path, time, GV, Gen: GameGenerator) -> list[Player]:
     ''' Generates player array based on start_end_indices.json file.'''

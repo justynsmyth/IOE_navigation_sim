@@ -2,11 +2,15 @@
     "n": 1000,
     "Seed": 1,
     "TimeLagActivated" : false,
-    "TimeLagMin" : null,
-    "TimeLagMax" : null,
+    "TimeLag" : {
+        "mean": 3,
+        "std_dev": 1
+    },
     "ReportTimePenaltyActivated" : false,
-    "ReportTimePenalty" : null,
-    
+    "ReportTimePenalty" : {
+        "mean": 5,
+        "std_dev": 1
+    },
     "PlayerSpeed": {
         "mean": 20,
         "std_dev": 5

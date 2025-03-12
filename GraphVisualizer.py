@@ -2,10 +2,11 @@ import json
 import pygame
 import networkx as nx
 import math
-import uuid
 from datetime import datetime
 from roadblock import Roadblock
 from ReportManager import ReportManager
+import asyncio
+
 
 # Constants
 NODE_SIZE = 12
@@ -187,10 +188,11 @@ class GraphVisualizer:
         roadblock = mp.get((node_a, node_b)) or mp.get((node_b, node_a))
         return (roadblock, roadblock is not None)
 
-    def ReportRoadblock(self, id: int, node_a, node_b):
+    async def ReportRoadblock(self, id: int, node_a, node_b, timelag: float = None):
         """ Called when a player or AI requests report a roadblock to others"""
         roadblock, exists = self.HasRoadblock(node_a, node_b, self.roadblock_map)
-
+        if timelag is not None:
+            await asyncio.sleep(timelag)
         if not exists:
             roadblock, exists = self.HasRoadblock(node_a, node_b, self.fake_roadblock_map)
             if not exists:
@@ -200,6 +202,7 @@ class GraphVisualizer:
 
         roadblock.reported = True
         roadblock.times_reported += 1
+
         self.RM.add_to_report_history(id, roadblock.id, datetime.now().strftime('%H:%M:%S.%f')[:-3], roadblock.real, node_a, node_b)
         self.reported_roadblocks.add((node_a, node_b))
         

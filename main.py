@@ -8,6 +8,7 @@ from player import LoadPlayerInfo, Player
 from roadblock import LoadRoadblockInfo
 from congestion import LoadCongestionInfo
 from ReportManager import ReportManager
+import asyncio
 
 import cProfile
 
@@ -113,14 +114,18 @@ class GameManager:
         self.num_players = len(self.players)
         self.finished_players = []
         self.failed_players = []
-
-    def UpdatePlayers(self):
+        
+    async def UpdatePlayers(self):
         """Update players' status and move finished/failed players to their respective lists."""
         self.finished_players = [player for player in self.players if player.finished]
         self.failed_players = [player for player in self.players if player.failed]
         unfinished_players = [player for player in self.players if not player.finished and not player.failed]
+
+        # Gather all player updates
+        await asyncio.gather(*[player.update() for player in unfinished_players])
+
+        # Check for finished or failed players after updates
         for player in unfinished_players:
-            player.update()
             if player.finished:
                 self.num_completed += 1
                 self.finished_players.append(player)
@@ -307,7 +312,7 @@ class GameManager:
         self.Generator.SaveNavHistory(self.time_started)
         self.RM.SaveReportHistory(self.time_started, self.GV.roadblock_map, self.GV.fake_roadblock_map)
 
-    def handle_events(self):
+    async def handle_events(self):
         margin = 10
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -331,6 +336,9 @@ class GameManager:
                     self.running = False
                 elif self.stop_button_rect.collidepoint(mouse_pos):
                     self.save_csv_files()                    
+                    
+                    for player in self.players:
+                        await player.cancel_all_tasks()
                     self.running = False
                     self.time = 0  # Reset the time accumulator
                     self.ResetGenerator()
@@ -347,19 +355,20 @@ class GameManager:
                     elif event.button == 5: # Scroll Down
                         self.scroll_y = max(self.scroll_y - self.scroll_speed, -(self.RM.content_height - (SCREEN_HEIGHT - 180 - 2 * margin)))
         return True
-    def update(self):
+    
+    async def update(self):
         screen.fill(WHITE)
         self.draw_buttons()
         self.draw_status_panel()
-        self.draw_map() # needs to be in front of report history for draw order (Black boxes in report history)
+        self.draw_map()  # needs to be in front of report history for draw order (Black boxes in report history)
         self.draw_report_history()
         self.draw_target_player()
         self.draw_timer()
 
         if self.running:
-            self.UpdatePlayers()
+            await self.UpdatePlayers()
 
-        return self.handle_events()
+        return await self.handle_events()
     
 
 def SetupGenerator() -> GameGenerator:
@@ -369,7 +378,7 @@ def SetupGenerator() -> GameGenerator:
     Generator = GameGenerator(merged_settings, start_end_json)
     return Generator
 
-def main():
+async def async_main():
     game_manager = GameManager()
     game_manager.InitCongestions()
     game_manager.InitGenerator()
@@ -383,7 +392,7 @@ def main():
 
     playing = True
     while playing:
-        playing = game_manager.update()
+        playing = await game_manager.update()
         pygame.display.flip()
         clock.tick(60)
 
@@ -396,4 +405,4 @@ def main():
 
 # Run the simulation
 if __name__ == "__main__":
-    main()
+    asyncio.run(async_main())

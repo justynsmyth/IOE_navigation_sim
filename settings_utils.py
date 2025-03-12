@@ -72,10 +72,19 @@ def isValidReportTimePenaltyValues(settings) -> bool:
 
 def isValidTimeLagValues(settings) -> bool:
     try:
-        time_lag = int(settings["TimeLag"])
+        time_lag = int(settings["TimeLag"]['mean'])
         if time_lag < 0:
             raise ValueError(
                 f"TimeLagMin: {time_lag} must be a non-negative integer.")
+        std_dev = (settings['TimeLag']['std_dev'])
+        if std_dev < 0:
+            raise ValueError(
+                f"TimeLagStd: {std_dev} must be a non-negative number.")
+        if time_lag < std_dev:
+            raise ValueError(
+                f"TimeLagMin: {time_lag} must be >= TimeLagStd: {std_dev}."
+            )
+
     except ValueError as e:
         print(e)
         exit(1)
