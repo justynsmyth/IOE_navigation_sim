@@ -60,7 +60,6 @@ class Player:
         self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Initial", self.curr_node_id, self.path)
         self.dest_node = self.path[1]
         self.curr_edge = (self.curr_node_id, self.dest_node)
-        self.GV.ChangePlayerEdgeLocation(self.curr_edge, None)
 
 
         self.is_initial = True
@@ -143,13 +142,11 @@ class Player:
             w.writerow(['Player', 'Time', 'posX', 'posY'])
     
     def player_finish(self):
-        self.GV.ChangePlayerEdgeLocation(None, self.curr_edge)
         self.finished = True
         self.curr_node_id = self.end
         self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Finish", self.curr_node_id, self.path)
 
     def player_failed(self):
-        self.GV.ChangePlayerEdgeLocation(None, self.curr_edge)
         self.failed = True
         self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Failed", self.curr_node_id, [])
     
@@ -182,9 +179,8 @@ class Player:
             self.traveled_distance = 0  # reset back to zero
 
             # update curr_edge
-            prev_edge = self.curr_edge
             self.curr_edge = (self.curr_node_id, self.dest_node)
-            self.GV.ChangePlayerEdgeLocation(self.curr_edge, prev_edge)
+            self.GV.ChangePlayerEdgeLocation(self.curr_edge, None)
 
             return False
         else:
@@ -279,6 +275,8 @@ class Player:
             if self.dest_node != self.curr_node_id:
                 self.path.popleft() # delete prev node from current path
             if len(self.path) > 1:
+                # A player should not be considered on any edge
+                self.GV.ChangePlayerEdgeLocation(None, self.curr_edge)
                 self.set_curr_node_id(self.dest_node)
                 if self.RoadblockOnPrevRoute:
                     self.OnPlayerReturnsFromRoadblock()

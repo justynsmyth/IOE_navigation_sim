@@ -12,7 +12,10 @@ def setup_logger(log_file_path):
     # Create a console handler
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(message)s', datefmt='%H:%M:%S')
+    formatter = logging.Formatter(
+        fmt='%(asctime)s.%(msecs)03d - %(message)s',
+        datefmt='%H:%M:%S'
+    )   
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
 

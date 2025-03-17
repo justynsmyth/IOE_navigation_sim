@@ -240,6 +240,10 @@ class GraphVisualizer:
         return 1.0
     
     def ChangePlayerEdgeLocation(self, edge = None , prev_edge = None):
+        ''' 
+        If edge is provided, add player as present on that edge.
+        If prev_edge is provided, remove the player from that previous edge
+        '''
         # Remove the player from the previous edge
         if prev_edge is not None:
             prev_node_a, prev_node_b = prev_edge
@@ -258,7 +262,6 @@ class GraphVisualizer:
             node_a, node_b = edge
             edge_a_b = (node_a, node_b)
             edge_b_a = (node_b, node_a)
-
             if edge_b_a in self.num_players_on_edge:
                 self.num_players_on_edge[edge_b_a] += 1
             else:

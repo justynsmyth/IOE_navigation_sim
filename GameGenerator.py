@@ -45,7 +45,7 @@ class GameGenerator:
         # AI Experimenter Setup
         self.TimeLagActivated = settings['TimeLagActivated']
         if settings['TimeLagActivated']:
-            self.ArrTimeLagValues = self.generate_timelag_values(settings['TimeLag']['mean'], settings['TimeLag']['std_dev'])
+            self.ArrTimeLagValues = self.generate_players_timelag_values(self.num_players)
         else:
             self.ArrTimeLagValues = [0] * self.n
 
@@ -75,8 +75,10 @@ class GameGenerator:
             'ProbCorrectRandomReport')
         self.start_end_json = start_end_json
 
-    def generate_timelag_values(self, mean, std_dev):
-        return np.round(self.rng.normal(loc=mean, scale=std_dev,size=self.n).tolist(), 2)
+    def generate_players_timelag_values(self, num_players):
+        mean = self.settings['TimeLag']['mean']
+        std_dev = self.settings['TimeLag']['std_dev']
+        return np.round(self.rng.normal(loc=mean, scale=std_dev, size=num_players).tolist(), 2)
 
     def generate_array_by_probability(self, probability) -> list:
         bool_array = self.rng.random(self.n) < probability
@@ -187,6 +189,7 @@ class GameGenerator:
                     self.settings['ReportTimePenalty']['mean'],
                     self.settings['ReportTimePenalty']['std_dev'],
                     ])
+
     def SaveDecisionCsv(self, time):
         directory = os.path.join('logs', time)
         os.makedirs(directory, exist_ok=True)
@@ -200,7 +203,6 @@ class GameGenerator:
                         '[3-2] Is Report Wrong If Adjacent and No Roadblock',
                         '[4] Random Time Sequence',
                         '[6] Is Random Report Correct',
-                        '[7] Time Lag Values',
                         ])
 
 
@@ -212,9 +214,7 @@ class GameGenerator:
                             self.ArrIsWrongAdjNoRoadblock[i],
                             self.random_time_sequences[i],
                             self.ArrIsCorrectRandomReport[i],
-                            self.ArrTimeLagValues[i],
                             ])
-
 
     def SavePlayerDecisionCsv(self, time):
         directory = os.path.join('logs', time)
@@ -228,6 +228,7 @@ class GameGenerator:
                         'ProbReportIfRoadblock',
                         'ProbReportIfNoRoadblock',
                         'Player Report Time Penalty',
+                        'Player Time Lag Value'
                         ])
 
             for i, player in enumerate(self.Players):
@@ -237,6 +238,7 @@ class GameGenerator:
                             player['report_roadblock_prob'],
                             player['false_report_no_roadblock_prob'],
                             self.ReportTimePenalties[i],
+                            self.ArrTimeLagValues[i],
                         ])
             w.writerow([])
             w.writerow(['PlayerID',
@@ -320,9 +322,7 @@ class GameGenerator:
         return result
     
     def GetNextTimeLag(self, id) -> bool:
-        idx = self.Players[id]['timelag_idx']
-        self.Players[id]["timelag_idx"] += 1
-        return self.ArrTimeLagValues[idx]
+        return self.ArrTimeLagValues[id]
 
 
     def ResetAllPlayerIndices(self):
