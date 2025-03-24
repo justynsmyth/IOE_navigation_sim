@@ -66,12 +66,14 @@ class Player:
         self.deviates = False
 
         self.tasks = set()
+
         
     def __repr__(self):
         return (f"Player(ID: {self.id}, "
+                f"Path: {list(self.path)}, "
                 f"Start: {self.start}, "
-                f"End: {self.end}, "
-                f"Pos: {self.pos})")
+                f"End: {self.end}) "
+                )
     
     def get_start_pos(self):
         """Get the start position from the GraphVisualizer."""
@@ -194,6 +196,10 @@ class Player:
         if not self.is_initial and not self.RoadblockOnPrevRoute:
             self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Waypoint Reached", self.curr_node_id, self.path)
 
+        if self.RoadblockOnPrevRoute and not self.ReportIfRoadblock:
+            logger.info(f"Player {self.id} is deviating due to a non-reported roadblock. Skipping navigation check (p_u).")
+            return
+
         follow_nav = self.Gen.GetNextFollowNavigation(self.id)
         if follow_nav:
             self.deviates = False
@@ -242,7 +248,7 @@ class Player:
             self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Detour from Reported Roadblock", self.curr_node_id, self.path.copy()) 
         else:
             # Player did not report. Player will need to find next best path given its own knowledge.
-            logger.info(f"Player {self.id} decides to not report roadblock. Detouring")
+            logger.info(f"Player {self.id} decides to not report roadblock between {self.curr_edge}. Detouring")
             self.path = Djikstra(self.curr_node_id, self.end, self.GV, self.known_roadblocks)
             self.deviates = True
             self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Detoured from Non-Reported Roadblock", self.curr_node_id, self.path.copy())
@@ -262,6 +268,18 @@ class Player:
                 self.moveTimeout = 0 
                 return False
         return False
+    
+    def is_player_affected_by_roadblock(self, roadblock):
+        """Check if the player's path includes the given roadblock."""
+        if not isinstance(roadblock, tuple) or len(roadblock) != 2:
+            raise ValueError("Roadblock must be a tuple of two elements (node1, node2).")
+        for i in range(len(self.path) - 1):
+            curr_node = self.path[i]
+            next_node = self.path[i + 1]
+            if (curr_node, next_node) == roadblock or (next_node, curr_node) == roadblock:
+                return True
+        return False
+
         
     async def update(self):
         """Update the position and direction over time. Checks for Roadblock."""
@@ -336,13 +354,13 @@ class Player:
                     if self.Gen.settings['TimeLagActivated']:
                         timelag = self.Gen.GetNextTimeLag(self.id)
                         task = asyncio.create_task(
-                            self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node, timelag)
+                            self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node, logger, timelag)
                         )
                         self.tasks.add(task)
                         task.add_done_callback(self.tasks.discard)
                         logger.info(f"Player {self.id} reporting roadblock between {self.curr_node_id} and {self.dest_node} with a time lag of {timelag} seconds")
                     else:
-                        self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node)
+                        self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node, logger)
                         logger.info(f"Player {self.id} reported roadblock between {self.curr_node_id} and {self.dest_node}")
                     self.CheckForReportTimePenalty(self.id)
 
@@ -359,13 +377,13 @@ class Player:
                     if self.Gen.settings['TimeLagActivated']:
                         timelag = self.Gen.GetNextTimeLag(self.id)
                         task = asyncio.create_task(
-                            self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node, timelag)                            
+                            self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node, logger, timelag)                            
                         )
                         self.tasks.add(task)
                         task.add_done_callback(self.tasks.discard)
                         logger.info(f"Player {self.id} false reporting roadblock between {self.curr_node_id} and {self.dest_node} with a time lag of {timelag} seconds")
                     else:  
-                        self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node)
+                        self.GV.ReportRoadblock(self.id, self.curr_node_id, self.dest_node, logger)
                         logger.info(f"Player {self.id} false reported a roadblock between {self.curr_node_id} and {self.dest_node}")
                     self.false_roadblocks.add((self.curr_node_id, self.dest_node))
                     self.CheckForReportTimePenalty(self.id)
@@ -380,6 +398,7 @@ class Player:
         await asyncio.gather(*self.tasks, return_exceptions=True)  # Wait for cancellation
         self.tasks.clear()  # Clear the set
 
+
 def LoadPlayerInfo(json_path, time, GV, Gen: GameGenerator) -> list[Player]:
     ''' Generates player array based on start_end_indices.json file.'''
     players = []
@@ -390,3 +409,4 @@ def LoadPlayerInfo(json_path, time, GV, Gen: GameGenerator) -> list[Player]:
             speed = Gen.players_speeds[i]
             players.append(Player(player_index, start, end, GV, Gen, speed, time))
     return players
+

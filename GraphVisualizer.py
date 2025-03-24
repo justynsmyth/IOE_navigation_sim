@@ -81,6 +81,8 @@ class GraphVisualizer:
         
         self.congestion_weights = {}
 
+        self.players = []
+
         self.enable_color_congestion = False
         self.RM = RM
 
@@ -103,8 +105,6 @@ class GraphVisualizer:
         self.images['p_done'] = pygame.transform.scale(self.images['p_done'], (PLAYER_IMAGE_SIZE, PLAYER_IMAGE_SIZE))
         self.images['p_deviate'] = pygame.transform.scale(self.images['p_deviate'], (PLAYER_IMAGE_SIZE, PLAYER_IMAGE_SIZE))
         self.images['p_failed'] = pygame.transform.scale(self.images['p_failed'], (PLAYER_IMAGE_SIZE, PLAYER_IMAGE_SIZE))
-
-
 
         for key in ['p_default', 'p_done', 'p_deviate', 'p_failed']:
             transparency = pygame.Surface(self.images[key].get_size(), pygame.SRCALPHA)
@@ -188,7 +188,7 @@ class GraphVisualizer:
         roadblock = mp.get((node_a, node_b)) or mp.get((node_b, node_a))
         return (roadblock, roadblock is not None)
 
-    async def ReportRoadblock(self, id: int, node_a, node_b, timelag: float = None):
+    async def ReportRoadblock(self, id: int, node_a, node_b, logger, timelag: float = None):
         """ Called when a player or AI requests report a roadblock to others"""
         roadblock, exists = self.HasRoadblock(node_a, node_b, self.roadblock_map)
         if timelag is not None:
@@ -203,9 +203,26 @@ class GraphVisualizer:
 
         roadblock.reported = True
         roadblock.times_reported += 1
-
-        self.RM.add_to_report_history(id, roadblock.id, datetime.now().strftime('%H:%M:%S.%f')[:-3], roadblock.real, node_a, node_b)
+        
+        # collect players only after the timelag has (possibly) occured to capture players affected when a report has been processed / communicated
+        affected_players = self.GetPlayersAffectedByRoadblock(node_a, node_b, self.players)
+        affected_player_data = [
+            {"player_id": player.id, "path": list(player.path)} for player in affected_players
+        ]
+        state = "Real" if roadblock.real else "Fake"
+        logger.info(f"Players affected by {state} Roadblock Report between ({node_a}, {node_b}) {roadblock.id}: {affected_player_data}")
+        self.RM.add_to_report_history(id, roadblock.id, datetime.now().strftime('%H:%M:%S.%f')[:-3], roadblock.real, node_a, node_b, affected_player_data)
         self.reported_roadblocks.add((node_a, node_b))
+
+    def GetPlayersAffectedByRoadblock(self, node_a, node_b, players: list) -> list:
+        if self.players is None:
+            print("ERROR. Players is None!")
+            exit(1)
+        affected_players = []
+        for player in players:
+            if player.is_player_affected_by_roadblock((node_a, node_b)):
+                affected_players.append(player)
+        return affected_players
         
     def EnableColorCongestion(self, enable):
         """ Enable or Disable Color Congestion"""
@@ -223,6 +240,10 @@ class GraphVisualizer:
     def InitPlayerCongestionMap(self, mp):
         self.player_congestion = {}
         self.player_congestion = mp
+
+
+    def InitPlayerReferences(self, players):
+        self.players = players
     
     def GetCongestion(self, node_a, node_b) -> float:
         """Returns the congestion factor (0-1) if congestion exists, otherwise returns 1 (no slowdown).

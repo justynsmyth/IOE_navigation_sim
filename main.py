@@ -111,6 +111,11 @@ class GameManager:
     def InitPlayers(self):
         self.players = []
         self.players = LoadPlayerInfo(START_END_PATH, self.time_started, self.GV, self.Generator)
+
+        # add self.players to GV
+        self.GV.InitPlayerReferences(self.players)
+
+        
         self.num_players = len(self.players)
         self.finished_players = []
         self.failed_players = []

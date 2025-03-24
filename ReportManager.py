@@ -15,14 +15,15 @@ class ReportManager:
         self.ReportHistory = []
         self.content_height = len(self.Reports) * self.report_spacing + self.padding
 
-    def add_to_report_history(self, id, roadblockIdx, time, exists: bool, node_a, node_b):
+    def add_to_report_history(self, id, roadblockIdx, time, exists: bool, node_a, node_b, affected_player_data: list):
         entry = {
             "id": id,
             "roadblockIdx": roadblockIdx,
             "time": time,
             "exists": exists,
             "node_a": node_a,
-            "node_b": node_b
+            "node_b": node_b,
+            "affected_players": affected_player_data
         }
         self.ReportHistory.append(entry)
         if exists:
@@ -67,5 +68,7 @@ class ReportManager:
                             entry['time'],
                             entry['exists'],
                             entry['node_a'],
-                            entry['node_b']
+                            entry['node_b'],
+                            entry['affected_players']
                             ])
+                            

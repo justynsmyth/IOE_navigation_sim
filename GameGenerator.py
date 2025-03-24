@@ -298,7 +298,6 @@ class GameGenerator:
             w.writerow([])
             w.writerow(['Player Congestion Weights'])
             w.writerow(['value', 'value/weight'])
-            print(GV.player_congestion)
             for num, weight in GV.player_congestion.items():
                 w.writerow([num, weight])
 
