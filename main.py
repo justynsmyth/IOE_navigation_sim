@@ -67,20 +67,17 @@ class GameManager:
             'play': pygame.image.load('src/imgs/play.png').convert_alpha(),
             'pause': pygame.image.load('src/imgs/pause.png').convert_alpha(),
             'stop': pygame.image.load('src/imgs/stop.png').convert_alpha(),
-            'save': pygame.image.load('src/imgs/save.png').convert_alpha(),
         }
 
         # Resize the images
         self.images['play'] = pygame.transform.scale(self.images['play'], (50, 50))
         self.images['pause'] = pygame.transform.scale(self.images['pause'], (50, 50))
         self.images['stop'] = pygame.transform.scale(self.images['stop'], (50, 50))
-        self.images['save'] = pygame.transform.scale(self.images['save'], (50, 50))
 
         # Define button positions
         self.play_button_rect = self.images['play'].get_rect(topleft=(10, 10))
         self.pause_button_rect = self.images['pause'].get_rect(topleft=(70, 10))
         self.stop_button_rect = self.images['stop'].get_rect(topleft=(130, 10))
-        self.save_button_rect = self.images['save'].get_rect(topleft=(190, 10))
 
         # Initialize game state
         self.running = False
@@ -181,7 +178,6 @@ class GameManager:
         self.screen.blit(self.images['play'], self.play_button_rect)
         self.screen.blit(self.images['pause'], self.pause_button_rect)
         self.screen.blit(self.images['stop'], self.stop_button_rect)
-        self.screen.blit(self.images['save'], self.save_button_rect)
 
     def draw_status_panel(self):
         margin = 10
@@ -340,6 +336,9 @@ class GameManager:
                 if self.play_button_rect.collidepoint(mouse_pos):
                     if not self.running:
                         self.running = True
+                        for player in self.players:
+                            player.start_game() # need to initialize file variables for logging
+
                 elif self.pause_button_rect.collidepoint(mouse_pos):
                     self.running = False
                 elif self.stop_button_rect.collidepoint(mouse_pos):
@@ -355,8 +354,6 @@ class GameManager:
                     self.ResetRoadblocks()
                     self.selected_player = None
                     self.RM.ResetReportManager()
-                elif self.save_button_rect.collidepoint(mouse_pos):
-                    self.save_csv_files()
                 if self.can_scroll:
                     max_scroll = max(0, self.RM.content_height - outer_height)
                     if event.button == 4:  # Scroll up
@@ -364,6 +361,7 @@ class GameManager:
                     elif event.button == 5:  # Scroll down
                         self.scroll_y = min(self.scroll_y + self.scroll_speed, 0)
         return True
+    
     
     async def update(self):
         screen.fill(WHITE)

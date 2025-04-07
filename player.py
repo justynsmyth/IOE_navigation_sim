@@ -16,15 +16,6 @@ class Player:
     def __init__(self, player_id, start_node, end_node, graph_visualizer : GraphVisualizer, gen : GameGenerator, speed, time):
         global logger
         
-        logs_dir = os.path.join('logs', time)
-        os.makedirs(logs_dir, exist_ok=True)
-
-        log_file_name = datetime.now().strftime('%m%d_%H%M%S.log')
-        log_file_path = os.path.join(logs_dir, log_file_name)
-
-        if logger is None:
-            logger = setup_logger(log_file_path)
-        
         self.id = player_id
         self.start = start_node
         self.end = end_node
@@ -42,7 +33,6 @@ class Player:
 
         self.speed = speed
 
-        self.create_position_csv()
         self.position_buffer = []  # Buffer to store position logs
         self.buffer_size = 100  # Number of logs to batch before writing
 
@@ -56,7 +46,7 @@ class Player:
 
         self.curr_node_id = start_node 
         self.path = Djikstra(self.curr_node_id, self.end, self.GV)
-        logger.info(f"player {self.id} started at {start_node}")
+
         self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Initial", self.curr_node_id, self.path)
         self.dest_node = self.path[1]
         self.curr_edge = (self.curr_node_id, self.dest_node)
@@ -66,7 +56,26 @@ class Player:
         self.deviates = False
 
         self.tasks = set()
+    
+    def start_game(self):
+        """Call this when the game officially begins to create logging."""
+        global logger
+        # set up the directory file
+        self.directory_path = os.path.join('logs', self.directory_time)
+        os.makedirs(self.directory_path, exist_ok=True)
 
+        self.position_csv = os.path.join(self.directory_path, 'Position.csv')
+        with open(self.position_csv, mode='w', newline='') as file:
+            w = csv.writer(file)
+            w.writerow(['Player', 'Time', 'posX', 'posY'])
+            
+        log_file_name = datetime.now().strftime('%m%d_%H%M%S.log')
+        log_file_path = os.path.join(self.directory_path, log_file_name)
+
+        if logger is None:
+            logger = setup_logger(log_file_path)
+        
+        logger.info(f"player {self.id} started at {self.start}")
         
     def __repr__(self):
         return (f"Player(ID: {self.id}, "
@@ -134,15 +143,7 @@ class Player:
         if self.position_buffer:
             self._flush_buffer()
 
-    def create_position_csv(self):
-        """Creates new log position"""
-        self.directory_path = os.path.join('logs', self.directory_time)
-        os.makedirs(self.directory_path, exist_ok=True)
-        self.position_csv = os.path.join(self.directory_path, 'Position.csv') 
-        with open(self.position_csv, mode='w', newline='') as file:
-            w = csv.writer(file)
-            w.writerow(['Player', 'Time', 'posX', 'posY'])
-    
+
     def player_finish(self):
         self.finished = True
         self.curr_node_id = self.end
