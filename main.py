@@ -214,26 +214,28 @@ class GameManager:
 
         pygame.draw.rect(screen, GRAY, (outer_x, outer_y, outer_width, outer_height))
 
-        if self.RM.content_height > outer_height:
-            self.can_scroll = True
-
-        content_surface = pygame.Surface((outer_width, outer_height))
-        content_surface.fill(GRAY) # Clear the surface with the background color
-
-        # Render the "Report History" title
         title_text = TITLE_FONT.render("Report History", True, BLACK)
         title_height = title_text.get_height()
+
+        reports_height = len(self.RM.Reports) * self.RM.report_spacing
+        self.RM.content_height = title_height + 10 + reports_height + 2 * padding
+
+        self.can_scroll = self.RM.content_height > outer_height
+
+        content_surface = pygame.Surface((outer_width, self.RM.content_height))
+        content_surface.fill(GRAY)
+
         content_surface.blit(title_text, (padding, padding))
 
-        # Render the reports below the title
-        text_y = padding + title_height + 10  # Start rendering reports below the title
+        text_y = padding + title_height + 10
         for report in self.RM.Reports:
             text = FONT.render(report, True, BLACK)
             content_surface.blit(text, (padding, text_y))
-            text_y += self.RM.report_spacing  # Move down for the next report
+            text_y += self.RM.report_spacing
 
-        # Draw the content surface onto the screen, adjusted by the scroll_y value
-        screen.blit(content_surface, (outer_x, outer_y), (0, -self.scroll_y, outer_width, outer_height))
+        screen.blit(content_surface, 
+                    (outer_x, outer_y),
+                    (0, -self.scroll_y, outer_width, outer_height))
 
     def draw_target_player(self):
         '''If a player is picked, it will display information about them.'''
@@ -319,6 +321,7 @@ class GameManager:
 
     async def handle_events(self):
         margin = 10
+        outer_height = SCREEN_HEIGHT - 180 - 2 * margin
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
@@ -355,10 +358,11 @@ class GameManager:
                 elif self.save_button_rect.collidepoint(mouse_pos):
                     self.save_csv_files()
                 if self.can_scroll:
-                    if event.button == 4: # Scroll up
+                    max_scroll = max(0, self.RM.content_height - outer_height)
+                    if event.button == 4:  # Scroll up
+                        self.scroll_y = max(self.scroll_y - self.scroll_speed, -max_scroll)
+                    elif event.button == 5:  # Scroll down
                         self.scroll_y = min(self.scroll_y + self.scroll_speed, 0)
-                    elif event.button == 5: # Scroll Down
-                        self.scroll_y = max(self.scroll_y - self.scroll_speed, -(self.RM.content_height - (SCREEN_HEIGHT - 180 - 2 * margin)))
         return True
     
     async def update(self):
