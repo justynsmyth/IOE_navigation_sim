@@ -134,6 +134,10 @@ class GameManager:
             elif player.failed:
                 self.num_failed += 1
                 self.failed_players.append(player)
+        
+        if len(self.finished_players) + len(self.failed_players) == self.num_players and self.running:
+            self.running = False
+            self.save_csv_files()
 
     def ResetPlayers(self):
         ''' Move all players back to start. Resets position logs to empty.'''
