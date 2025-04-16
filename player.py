@@ -7,14 +7,12 @@ from datetime import datetime
 import os
 from GameGenerator import GameGenerator
 from GraphVisualizer import GraphVisualizer
-from logger import setup_logger 
-import asyncio
+from logger import logger
 
-logger = None
+import asyncio
 
 class Player:
     def __init__(self, player_id, start_node, end_node, graph_visualizer : GraphVisualizer, gen : GameGenerator, speed, time):
-        global logger
         
         self.id = player_id
         self.start = start_node
@@ -59,7 +57,6 @@ class Player:
     
     def start_game(self):
         """Call this when the game officially begins to create logging."""
-        global logger
         # set up the directory file
         self.directory_path = os.path.join('logs', self.directory_time)
         os.makedirs(self.directory_path, exist_ok=True)
@@ -69,12 +66,6 @@ class Player:
             w = csv.writer(file)
             w.writerow(['Player', 'Time', 'posX', 'posY'])
             
-        log_file_name = datetime.now().strftime('%m%d_%H%M%S.log')
-        log_file_path = os.path.join(self.directory_path, log_file_name)
-
-        if logger is None:
-            logger = setup_logger(log_file_path)
-        
         logger.info(f"player {self.id} started at {self.start}")
         
     def __repr__(self):

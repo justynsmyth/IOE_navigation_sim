@@ -8,8 +8,10 @@ from player import LoadPlayerInfo, Player
 from roadblock import LoadRoadblockInfo
 from congestion import LoadCongestionInfo
 from ReportManager import ReportManager
-import asyncio
+from logger import logger, setup_logger
 
+import asyncio
+import os
 import cProfile
 
 
@@ -340,8 +342,23 @@ class GameManager:
                 if self.play_button_rect.collidepoint(mouse_pos):
                     if not self.running:
                         self.running = True
+                        
+                        # Clear previous handlers
+                        for handler in logger.handlers[:]:
+                            logger.removeHandler(handler)
+                            handler.close()
+        
+
+                        # Set up logger for the game
+                        directory = os.path.join('logs', self.time_started)
+                        os.makedirs(directory, exist_ok=True)
+
+                        log_file_name = 'console.log'
+                        log_file_path = os.path.join(directory, log_file_name)
+                        setup_logger(log_file_path)
+
                         for player in self.players:
-                            player.start_game() # need to initialize file variables for logging
+                            player.start_game()
 
                 elif self.pause_button_rect.collidepoint(mouse_pos):
                     self.running = False
