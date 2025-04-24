@@ -36,7 +36,7 @@ class ReportManager:
         '''Save Report History to CSV File.
         1. Lists all roadblocks by index, node_a, node_b
         2. Lists all fake roadblocks by index, node_a, node_b
-        3. Saves navigation history stored in the order appended in ReportHistory list
+        3. Saves navigation history stored in the order appended in  list
         '''
         directory = os.path.join('logs', time)
         os.makedirs(directory, exist_ok=True)

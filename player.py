@@ -11,6 +11,9 @@ from logger import logger
 
 import asyncio
 
+CHECK_DISTANCE = 0.4 # value must be below 0.5 (for roadblock detection purposes)
+MIN_DISTANCE_UNITS = 5 # distance a player travels
+
 class Player:
     def __init__(self, player_id, start_node, end_node, graph_visualizer : GraphVisualizer, gen : GameGenerator, speed, time):
         
@@ -37,7 +40,10 @@ class Player:
         self.RoadblockOnPrevRoute = False
         self.CheckedRoadblockOnCurrentRoute = False
         self.ReportIfRoadblock = False
-        self.check_distance = 15 # higher means the player must travel a longer distance before checking for roadblock
+
+        self.roadblock_spotting_position = CHECK_DISTANCE
+        self.min_spotting_distance = MIN_DISTANCE_UNITS
+
         self.traveled_distance = 0
         self.known_roadblocks = set() # personal list of roadblocks known to the player (does not have to be reported)
         self.false_roadblocks = set() # personal list of roadblocks that were falsely reported by player
@@ -138,6 +144,7 @@ class Player:
     def player_finish(self):
         self.finished = True
         self.curr_node_id = self.end
+        self.GV.ChangePlayerEdgeLocation(None, self.curr_edge)
         self.Gen.add_to_nav_history(self.id, datetime.now().strftime('%H:%M:%S.%f'), "Finish", self.curr_node_id, self.path)
 
     def player_failed(self):
@@ -325,17 +332,18 @@ class Player:
         else:
             delta_t = 1  # Edge case handling
 
-        # Increment t (normalized progress)
+        # Update position
         self.t = min(self.t + delta_t, 1)
-
         interpolated_x = x2 + self.t * (x1 - x2)
         interpolated_y = y2 + self.t * (y1 - y2)
         self.set_pos((interpolated_x, interpolated_y))
 
-        self.traveled_distance += adjusted_speed * delta_t
 
-        if self.traveled_distance >= self.check_distance:
-            _, exists = self.GV.HasRoadblock(self.curr_node_id, self.dest_node, )
+        # Determine when to check (whichever comes first - position or progress)
+        should_check = (self.t >= self.roadblock_spotting_position) and not self.CheckedRoadblockOnCurrentRoute
+
+        if should_check:
+            _, exists = self.GV.HasRoadblock(self.curr_node_id, self.dest_node)
             if exists and not self.RoadblockOnPrevRoute:
                 logger.info(f"Player {self.id} found roadblock between {self.curr_node_id} and {self.dest_node}. Returning to current node.")
                 # Detour back to current node

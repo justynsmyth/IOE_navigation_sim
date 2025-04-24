@@ -5,7 +5,7 @@ from GraphVisualizer import GraphVisualizer
 from GameGenerator import GameGenerator
 from settings_utils import merge_settings, process_settings, load_settings
 from player import LoadPlayerInfo, Player
-from roadblock import LoadRoadblockInfo
+from roadblock import LoadRoadblockInfo, Roadblock
 from congestion import LoadCongestionInfo
 from ReportManager import ReportManager
 from logger import logger, setup_logger
@@ -168,6 +168,7 @@ class GameManager:
     def ResetRoadblocks(self):
         """ Mark all roadblocks as unreported. """
         self.RM.ReportHistory = []
+
         self.InitRoadblocks()
 
     def InitCongestions(self):
@@ -369,6 +370,7 @@ class GameManager:
                         await player.cancel_all_tasks()
                     self.running = False
                     self.time = 0  # Reset the time accumulator
+                    Roadblock.reset_roadblock_ctr()
                     self.ResetGenerator()
                     self.ResetCongestions()
                     self.ResetPlayers()

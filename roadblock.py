@@ -26,6 +26,10 @@ class Roadblock:
 
     def get_roadblock_id(self):
         return self.roadblock_id
+
+    @staticmethod
+    def reset_roadblock_ctr():
+        Roadblock._id_ctr = 0
     
 
 def LoadRoadblockInfo(json_path, GV) -> list[Roadblock]:
